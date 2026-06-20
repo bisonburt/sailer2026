@@ -265,7 +265,12 @@ static assmt_type *assmts_from_object(cJSON *obj)
     cJSON_ArrayForEach(member, obj) {
         const char *key = member->string;
         if (key == NULL) continue;
+        /* reserved/ignored keys: module tag, name, and free-form comments
+           ("comment" or any key beginning with "//" or "_") so scenes can be
+           annotated despite JSON having no native comment syntax. */
         if (strcmp(key, "kind") == 0 || strcmp(key, "name") == 0) continue;
+        if (strcmp(key, "comment") == 0) continue;
+        if (key[0] == '_' || (key[0] == '/' && key[1] == '/')) continue;
 
         if (cJSON_IsArray(member) && array_of_objects(member)) {
             /* repeated assignment: one assmt node per array element */

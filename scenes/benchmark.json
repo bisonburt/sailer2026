@@ -1,0 +1,204 @@
+{
+  "scene": [
+    {
+      "kind": "view",
+      "viewpoint": { "xyz": [0.0, 9.0, -34.0] },
+      "gazedir":   { "xyz": [0.0, -0.12, 0.35] },
+      "updir":     { "xyz": [0.0, 1.0, 0.0] },
+      "angle": 0.32,
+      "ratio": 1.0,
+      "width": 1600,
+      "height": 1600
+    },
+
+    {
+      "kind": "global",
+      "ambient":    { "rgb": [1.0, 1.0, 1.0] },
+      "ambcoef": 0.22,
+      "lightsrc":   { "xyz": [-22.0, 28.0, -24.0] },
+      "lightcolor": { "rgb": [1.0, 1.0, 0.97] },
+      "bkgrndsize": 100.0,
+      "maxdepth": 8,
+      "bkgrndsurface": {
+        "kind": "paramap",
+        "axis": {
+          "kind": "bbox",
+          "loc":  { "xyz": [0.0, 0.0, 0.0] },
+          "size": { "xyz": [100.0, 100.0, 100.0] },
+          "rot":  { "xyz": [0.0, 0.0, 0.0] },
+          "flags": "WIDEALL"
+        },
+        "mapx": { "type": "PLANARY" },
+        "mapy": { "type": "OFF" },
+        "mapz": { "type": "OFF" },
+        "value": {
+          "kind": "range",
+          "rangevalue": "XVALUE",
+          "fade": {
+            "start": 0.0,
+            "stop": 1.0,
+            "stvalue": { "kind": "attribute", "color": { "rgb": [0.25, 0.22, 0.32] } },
+            "spvalue": { "kind": "attribute", "color": { "rgb": [0.35, 0.6, 1.0] } }
+          }
+        }
+      }
+    },
+
+    {
+      "kind": "check", "name": "floortex",
+      "rep": { "xyz": [0.18, 0.18, 0.18] },
+      "even": { "kind": "attribute", "color": { "rgb": [0.85, 0.85, 0.88] }, "refl": { "rgb": [0.3, 0.3, 0.3] } },
+      "odd":  { "kind": "attribute", "color": { "rgb": [0.10, 0.12, 0.16] }, "refl": { "rgb": [0.3, 0.3, 0.3] } }
+    },
+
+    {
+      "kind": "paramap", "name": "marble",
+      "axis": {
+        "kind": "bbox",
+        "loc":  { "xyz": [0.0, 0.0, 0.0] },
+        "size": { "xyz": [6.0, 6.0, 6.0] },
+        "rot":  { "xyz": [0.0, 0.0, 0.0] },
+        "flags": "WIDEALL"
+      },
+      "mapx": { "type": "FNOISE", "lattice": { "xyz": [3.0, 3.0, 3.0] } },
+      "mapy": { "type": "OFF" },
+      "mapz": { "type": "OFF" },
+      "value": {
+        "kind": "range",
+        "rangevalue": "XVALUE",
+        "fade": {
+          "start": 0.0,
+          "stop": 1.0,
+          "stvalue": { "kind": "attribute", "color": { "rgb": [0.95, 0.95, 1.0] }, "highlt": 30.0 },
+          "spvalue": { "kind": "attribute", "color": { "rgb": [0.25, 0.45, 0.55] }, "highlt": 8.0 }
+        }
+      }
+    },
+
+    {
+      "kind": "attribute", "name": "mirror",
+      "color":  { "rgb": [0.05, 0.06, 0.08] },
+      "refl":   { "rgb": [0.95, 0.95, 0.97] },
+      "highlt": 60.0
+    },
+
+    {
+      "kind": "attribute", "name": "ruby",
+      "color":  { "rgb": [0.75, 0.08, 0.12] },
+      "refl":   { "rgb": [0.6, 0.4, 0.4] },
+      "highlt": 40.0
+    },
+
+    {
+      "kind": "attribute", "name": "gold",
+      "color":  { "rgb": [0.92, 0.72, 0.20] },
+      "refl":   { "rgb": [0.9, 0.75, 0.35] },
+      "highlt": 50.0
+    },
+
+    {
+      "kind": "attribute", "name": "jade",
+      "color":  { "rgb": [0.20, 0.62, 0.40] },
+      "refl":   { "rgb": [0.4, 0.5, 0.4] },
+      "highlt": 25.0
+    },
+
+    {
+      "comment": "checkerboard floor",
+      "kind": "box",
+      "loc":  { "xyz": [0.0, -3.0, 0.0] },
+      "axis": { "xyz": [80.0, 1.0, 80.0] },
+      "rot":  { "xyz": [0.0, 0.0, 0.0] },
+      "diff": 1.0,
+      "refl": 0.18,
+      "surface": "floortex"
+    },
+
+    {
+      "comment": "big reflective sphere",
+      "kind": "sphere",
+      "loc":  { "xyz": [-7.0, 0.5, 4.0] },
+      "size": 3.5,
+      "diff": 0.85,
+      "refl": 0.85,
+      "surface": "mirror"
+    },
+
+    {
+      "comment": "marble sphere in the middle",
+      "kind": "sphere",
+      "loc":  { "xyz": [0.0, 0.0, 0.0] },
+      "size": 3.0,
+      "diff": 1.0,
+      "refl": 0.15,
+      "surface": "marble"
+    },
+
+    {
+      "comment": "ruby sphere",
+      "kind": "sphere",
+      "loc":  { "xyz": [6.5, -0.6, -2.5] },
+      "size": 2.4,
+      "diff": 1.0,
+      "refl": 0.25,
+      "surface": "ruby"
+    },
+
+    {
+      "comment": "gold cylinder standing on the floor",
+      "kind": "conic",
+      "loc":  { "xyz": [10.5, 0.0, 6.0] },
+      "axis": { "xyz": [1.6, 5.0, 1.6] },
+      "rot":  { "xyz": [0.0, 0.0, 0.0] },
+      "type": "cylinder",
+      "diff": 1.0,
+      "refl": 0.35,
+      "surface": "gold"
+    },
+
+    {
+      "comment": "CSG: a gold cube with a sphere carved out of the top",
+      "kind": "csg",
+      "operation": "-",
+      "left": {
+        "kind": "box",
+        "loc":  { "xyz": [-9.0, 1.0, 11.0] },
+        "axis": { "xyz": [3.2, 3.2, 3.2] },
+        "rot":  { "xyz": [0.0, 25.0, 0.0] },
+        "diff": 1.0,
+        "refl": 0.2,
+        "surface": "gold"
+      },
+      "right": {
+        "kind": "sphere",
+        "loc":  { "xyz": [-9.0, 3.4, 11.0] },
+        "size": 2.4,
+        "diff": 1.0,
+        "refl": 0.2,
+        "surface": "gold"
+      }
+    },
+
+    {
+      "comment": "CSG: two jade spheres fused into a blob (union)",
+      "kind": "csg",
+      "operation": "+",
+      "left": {
+        "kind": "sphere",
+        "loc":  { "xyz": [8.0, 2.6, 11.0] },
+        "size": 2.4,
+        "diff": 1.0,
+        "refl": 0.2,
+        "surface": "jade"
+      },
+      "right": {
+        "kind": "sphere",
+        "loc":  { "xyz": [10.6, 1.6, 10.0] },
+        "size": 1.8,
+        "diff": 1.0,
+        "refl": 0.2,
+        "surface": "jade"
+      }
+    }
+  ]
+}

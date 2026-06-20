@@ -34,9 +34,14 @@ SRCS := \
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: all run clean
+.PHONY: all release run bench clean
 
 all: $(BIN)
+
+# Optimized build (see BENCHMARK.md). ~1.3x over the default -O2 baseline,
+# single-threaded. Note: -ffast-math relaxes IEEE semantics; verify output.
+release: clean
+	$(MAKE) CFLAGS="-O3 -ffast-math -flto -mcpu=apple-m4 -fomit-frame-pointer -DNDEBUG -Isrc -Ithird_party $(WARN)" LDFLAGS="-lm -flto"
 
 $(BIN): $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $(BIN)
@@ -48,6 +53,10 @@ $(BUILD)/%.o: %.c
 
 run: $(BIN)
 	./$(BIN) scenes/cone.json -o cone.png
+
+# Render the benchmark scene 5x and print render times (see BENCHMARK.md).
+bench: $(BIN)
+	@for i in 1 2 3 4 5; do ./$(BIN) scenes/benchmark.json -o /tmp/bench.png | grep "render time"; done
 
 clean:
 	rm -rf $(BUILD) $(BIN)

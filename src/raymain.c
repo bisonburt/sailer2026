@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #include "mathtype.h"
 #include "structs.h"
 #include "init.h"
@@ -98,7 +99,8 @@ static point_type hit,nor,lite;
 static rgb_type rayrgb;
 static int x,y;
 static int Width,Height;
-time_t raytime;
+struct timeval t0,t1;
+double render_ms;
 
 
     Width = GetWidth();
@@ -110,10 +112,13 @@ time_t raytime;
     lite = lightsrc;
     ray.s = *GetViewpoint();
 
-    raytime = time(NULL);
+    /* time only the ray-tracing work, excluding image encode/write */
+    gettimeofday(&t0,NULL);
     for (y=0; y < Height; y++)
     {
-        printf("Rendering %s, line %d/%d\n",outputfile,y+1,Height);
+        /* progress every ~6% so stdout I/O does not skew the benchmark */
+        if ((y % ((Height/16) + 1)) == 0)
+            printf("Rendering %s, line %d/%d\n",outputfile,y+1,Height);
         for (x=0; x < Width; x++)
         {
             GetView(x,y,&ray.d);
@@ -126,11 +131,12 @@ time_t raytime;
             ImagePutPixel(rayrgb);
         }
     }
-    raytime -= time(NULL);
-    raytime = -raytime;
+    gettimeofday(&t1,NULL);
+    render_ms = (t1.tv_sec - t0.tv_sec)*1000.0 + (t1.tv_usec - t0.tv_usec)/1000.0;
 	ImageSave(outputfile,outputquality);
 	ImageClose();
-    printf("time in seconds: %ld\n",raytime);
+    printf("render time: %.1f ms  (%.0f primary rays/sec)\n",
+           render_ms, (double)Width*Height / (render_ms/1000.0));
     printf("Normal Rays: %d\n",G_NormalRays);
     printf("Shadow Rays: %d\n",G_ShadowRays);
     printf("Shadow Cache Hits: %d\n",G_ShadowCacheHit);
