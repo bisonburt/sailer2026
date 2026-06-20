@@ -1,0 +1,11 @@
+{
+  "files.associations": {
+    "*.h": "c",
+    "*.c": "c"
+  },
+  "C_Cpp.default.cStandard": "c17",
+  "[c]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4
+  }
+}

@@ -1,0 +1,545 @@
+/*
+*/
+#include "s:colors.sail"
+
+view
+{
+    viewpoint = xyz(10.0,5.0,-20.0);
+    gazedir = xyz(-0.10,-0.05,0.20);
+    updir = xyz(0.0,1.0,0.0);
+    angle = 0.42;
+#if 1
+    ratio = 1.0;
+    width =  512;
+    height = 512;
+#else
+    ratio = 1.365;
+    width =  736/2;
+    height = 482/2;
+#endif
+};
+
+
+global
+{
+    ambient = rgb(1.0,1.0,1.0);
+    ambcoef = 0.3;
+    lightsrc = xyz(5.0,20.0,-25.0);
+    lightcolor = rgb(1.0,1.0,1.0);
+    bkgrndsize = 100.0;
+    bkgrndsurface = paramap
+    {
+        axis = bbox
+        {
+            loc = xyz(0.0,0.0,0.0);
+            size = xyz(100.0,100.0,100.0);
+            rot = xyz(0.0,0.0,0.0);
+            flags = WIDEALL;
+        };
+        mapx = {type = OFF;};
+        mapy = {type = FNOISE; lattice = xyz(5.0,30.0,5.0);};
+        mapz = {type = OFF;};
+        value = range
+        {
+            rangevalue = YVALUE;
+            fade =
+            {
+                start = 0.0;
+                stop = 1.0;
+                stvalue = attribute { color = rgb(1.0,1.0,1.0);};
+                spvalue = attribute { color = rgb(0.1,0.2,0.6);};
+            };
+        };
+    };
+};
+
+
+paramap test1
+{
+    axis = bbox
+    {
+        loc = xyz(0.0,0.0,0.0);
+        size = xyz(4.0,4.0,4.0);
+        rot = xyz(0.0,0.0,0.0);
+        flags = WIDEALL;
+    };
+    mapx = {type = FNOISE; lattice = xyz(5.0,5.0,5.0);};
+    mapy = {type = OFF;};
+    mapz = {type = OFF;};
+    value = range
+    {
+        rangevalue = XVALUE;
+        fade =
+        {
+            start = 0.0;
+            stop = 1.0;
+            stvalue = attribute
+            {
+                color = rgb(1.0,1.0,0.0);
+                highlt = 10.0;
+            };
+            spvalue = attribute
+            {
+                color = rgb(0.0,0.0,1.0);
+                highlt = 1.0;
+            };
+        };
+    };
+};
+
+paramap test2
+{
+    axis = bbox
+    {
+        loc = xyz(0.0,0.0,0.0);
+        size = xyz(4.0,4.0,4.0);
+        rot = xyz(0.0,0.0,0.0);
+        flags = WIDEALL;
+    };
+    mapx = {type = FNOISE; lattice = xyz(5.0,5.0,5.0);};
+    mapy = {type = OFF;};
+    mapz = {type = OFF;};
+    value = range
+    {
+        rangevalue = XVALUE;
+        fade =
+        {
+            start = 0.0;
+            stop = 1.0;
+            stvalue = attribute
+            {
+                color = rgb(255.0/255.0,103.0/255.0,124.0/255.0);
+                highlt = 10.0;
+            };
+            spvalue = attribute
+            {
+                color = rgb(156.0/255.0,73.0/255.0,137.0/255.0);
+                highlt = 0.5;
+            };
+        };
+    };
+};
+
+paramap test3
+{
+    axis = bbox
+    {
+        loc = xyz(0.0,0.0,0.0);
+        size = xyz(4.0,4.0,4.0);
+        rot = xyz(0.0,0.0,0.0);
+        flags = WIDEALL;
+    };
+    mapx = {type = NOISE; lattice = xyz(5.0,5.0,5.0);};
+    mapy = {type = OFF;};
+    mapz = {type = OFF;};
+    value = range
+    {
+        rangevalue = XVALUE;
+        fade =
+        {
+            start = 0.0;
+            stop = 1.0;
+            stvalue = attribute
+            {
+                color = rgb(1.0,1.0,1.0);
+                highlt = 10.0;
+            };
+            spvalue = attribute
+            {
+                color = rgb(0.6,0.8,1.0);
+                highlt = 0.5;
+            };
+        };
+    };
+};
+
+
+paramap test4
+{
+    axis = bbox
+    {
+        loc = xyz(0.0,0.0,0.0);
+        size = xyz(4.0,4.0,4.0);
+        rot = xyz(0.0,0.0,0.0);
+        flags = WIDEALL;
+    };
+    mapx = {type = FNOISE; lattice = xyz(5.0,5.0,5.0);};
+    mapy = {type = OFF;};
+    mapz = {type = OFF;};
+    value = range
+    {
+        rangevalue = XVALUE;
+        fade =
+        {
+            start = 0.0;
+            stop = 1.0;
+            stvalue = attribute
+            {
+                color = rgb(1.0,1.0,1.0);
+                highlt = 10.0;
+            };
+            spvalue = attribute
+            {
+                color = rgb(0.9,0.3,0.6);
+                highlt = 0.5;
+            };
+        };
+    };
+};
+
+
+range testrange1
+{
+    rep = 10.0;
+    rangevalue = XVALUE;
+    solid =
+    {
+        start = 0.0;
+        stop = 0.5;
+        value = attribute {color = rgb(0.7,0.5,0.9);};
+    };
+    solid =
+    {
+        start = 0.5;
+        stop = 1.0;
+        value = attribute {color = rgb(0.6,0.8,1.0);};
+    };
+};
+
+range testrange2
+{
+    rep = 10.0;
+    rangevalue = XVALUE;
+    solid =
+    {
+        start = 0.0;
+        stop = 0.5;
+        value = attribute {color = rgb(0.6,0.8,0.7);};
+    };
+    solid =
+    {
+        start = 0.5;
+        stop = 1.0;
+        value = attribute {color = rgb(0.9,0.7,0.5);};
+    };
+};
+
+
+
+
+paramap btest
+{
+    axis = bbox
+    {
+        loc = xyz(0.0,-5.0,0.0);
+        size = xyz(60.0,1.0,60.0);
+        rot = xyz(0.0,0.0,0.0);
+        flags = WIDEALL;
+    };
+    mapx = {type = PLANARX;};
+    mapy = {type = OFF;};
+    mapz = {type = OFF;};
+    value = range
+    {
+        rangevalue = XVALUE;
+        solid =
+        {
+            start = 0.0;
+            stop = 0.5;
+            value = paramap
+            {
+                axis = bbox
+                {
+                    loc = xyz(-60.0,-5.0,0.0);
+                    size = xyz(60.0,1.0,60.0);
+                    rot = xyz(0.0,0.0,0.0);
+                    flags = WIDEY,GLOBAL;
+                };
+                mapx = {type = RADIALY;};
+                mapy = {type = OFF;};
+                mapz = {type = OFF;};
+                value = testrange1;
+            };
+        };
+        solid =
+        {
+            start = 0.5;
+            stop = 1.0;
+            value = paramap
+            {
+                axis = bbox
+                {
+                    loc = xyz(60.0,-5.0,0.0);
+                    size = xyz(60.0,1.0,60.0);
+                    rot = xyz(0.0,0.0,0.0);
+                    flags = WIDEY,GLOBAL;
+                };
+                mapx = {type = RADIALY;};
+                mapy = {type = OFF;};
+                mapz = {type = OFF;};
+                value = testrange2;
+            };
+        };
+    };
+};
+
+
+csg
+{
+    operation = "*";
+    left = sphere
+    {
+        loc = xyz(0.0,0.0,0.0);
+        size = 5.5;
+        diff = 1.0;
+        refl = 0.0;
+        surface = paramap
+        {
+            axis = bbox
+            {
+                loc = xyz(0.0,0.0,0.0);
+                size = xyz(5.5,5.5,5.5);
+                rot = xyz(0.0,0.0,0.0);
+                flags = WIDEY;
+            };
+            mapx = {type = ANGULARY;};
+            mapy = {type = PLANARY;};
+            mapz = {type = PLANARY;};
+            value = mandel
+            {
+                left =  0.42777153;
+                right = 0.42905474;
+                top =    -0.2099939;
+                bottom = -0.2093741;
+                rep = 5.0;
+                maxcount = 250;
+                rangemodule = range
+                {
+                    rangevalue = XVALUE;
+                    fade =
+                    {
+                        start = 0.0;
+                        stop = 0.4;
+                        stvalue = attribute {color = rgb(0.4,0.0,0.3);};
+                        spvalue = attribute {color = rgb(0.8,0.3,0.3);};
+                    };
+                    fade =
+                    {
+                        start = 0.4;
+                        stop = 0.7;
+                        stvalue = attribute {color = rgb(0.8,0.3,0.3);};
+                        spvalue = attribute {color = rgb(0.2,0.7,0.7);};
+                    };
+                    fade =
+                    {
+                        start = 0.7;
+                        stop = 1.0;
+                        stvalue = attribute {color = rgb(0.2,0.7,0.7);};
+                        spvalue = attribute {color = rgb(0.2,0.3,0.5);};
+                    };
+                    value = attribute {color = rgb(0.0,0.0,0.0);};
+                };
+            };
+        };
+    };
+    right = csg
+    {
+        operation = "-";
+        left = box
+        {
+            loc  = xyz(0.0,0.0,0.0);
+            axis = xyz(4.0,4.00,4.0);
+            rot  = xyz(14.0,6.0,24.0);
+            diff = 1.0;
+            refl = 0.0;
+            surface = paramap
+            {
+                axis = bbox
+                {
+                    loc = xyz(0.0,0.0,0.0);
+                    size = xyz(10.0,10.0,10.0);
+                    rot = xyz(0.0,0.0,0.0);
+                    flags = NONE;
+                };
+                mapx = {type = FNOISE; lattice = xyz(2.0,2.0,2.0);};
+                mapy = {type = OFF;};
+                mapz = {type = OFF;};
+                value = range
+                {
+                    rep = 6.0;
+                    rangevalue = XVALUE;
+                    fade =
+                    {
+                        start = 0.0;
+                        stop = 0.333;
+                        stvalue = attribute {color = rgb(0.1,0.6,0.5);};
+                        spvalue = attribute {color = rgb(0.7,0.3,0.3);};
+                    };
+                    fade =
+                    {
+                        start = 0.333;
+                        stop = 0.666;
+                        stvalue = attribute {color = rgb(0.0,0.3,0.7);};
+                        spvalue = attribute {color = rgb(0.7,0.3,0.0);};
+                    };
+                    fade =
+                    {
+                        start = 0.666;
+                        stop = 1.0;
+                        stvalue = attribute {color = rgb(0.9,0.9,0.3);};
+                        spvalue = attribute {color = rgb(0.5,0.1,0.6);};
+                    };
+                    value = attribute {color = rgb(0.0,0.0,0.0);};
+                };
+            };
+        };
+        right = sphere
+        {
+            loc = xyz(0.0,0.0,0.0);
+            size = 5.0;
+            diff = 1.0;
+            refl = 0.0;
+            surface = test1;
+        };
+    };
+};
+
+csg
+{
+    operation = "-";
+    left = sphere
+    {
+        loc = xyz(-25.0,5.0,20.0);
+        size = 9.0;
+        diff = 1.0;
+        refl = 0.0;
+        surface = test1;
+    };
+    right = csg
+    {
+        operation = "-";
+        left = box
+        {
+            loc  = xyz(-25.0,5.0,20.0);
+            axis = xyz(9.0,9.0,9.0);
+            rot  = xyz(0.0,0.0,0.0);
+            diff = 1.0;
+            refl = 0.0;
+            surface = test4;
+        };
+        right = csg
+        {
+            operation = "+";
+            left = csg
+            {
+                operation = "+";
+                left = box
+                {
+                    loc  = xyz(-25.0,5.0,20.0);
+                    axis = xyz(9.0,3.0,3.0);
+                    rot  = xyz(0.0,0.0,0.0);
+                    diff = 1.0;
+                    refl = 0.0;
+                    surface = test4;
+                };
+                right = box
+                {
+                    loc  = xyz(-25.0,5.0,20.0);
+                    axis = xyz(3.0,9.0,3.0);
+                    rot  = xyz(0.0,0.0,0.0);
+                    diff = 1.0;
+                    refl = 0.0;
+                    surface = test4;
+                };
+            };
+            right = box
+            {
+                loc  = xyz(-25.0,5.0,20.0);
+                axis = xyz(3.0,3.0,9.0);
+                rot  = xyz(0.0,0.0,0.0);
+                diff = 1.0;
+                refl = 0.0;
+                surface = test4;
+            };
+        };
+    };
+};
+
+csg
+{
+    operation = "*";
+    left = sphere
+    {
+       loc = xyz(5.0,7.0,30.0);
+       size = 9.0;
+       diff = 0.6;
+       refl = 0.4;
+       surface = test2;
+    };
+    right = sphere
+    {
+       loc = xyz(5.0,-3.0,30.0);
+       size = 9.0;
+       diff = 0.6;
+       refl = 0.4;
+       surface = test3;
+    };
+};
+
+box
+{
+    loc  = xyz(0.0,-6.0,0.0);
+    axis = xyz(60.0,1.00,60.0);
+    rot  = xyz(0.0,0.0,0.0);
+    diff = 1.0;
+    refl = 0.0;
+    surface = paramap
+    {
+        axis = bbox
+        {
+            loc = xyz(0.0,-5.5,0.0);
+            size = xyz(60.01,1.01,60.01);
+            rot = xyz(0.0,0.0,0.0);
+            flags = WIDEALL;
+        };
+        mapx = {type = PLANARX;};
+        mapy = {type = PLANARZ;};
+        mapz = {type = PLANARY;};
+        value = mandel
+        {
+            left =  -1.14742531;
+            right = -1.14731848;
+            top =    0.276790500;
+            bottom = 0.276698625;
+            rep = 5.0;
+            maxcount = 250;
+            rangemodule = range
+            {
+                rangevalue = XVALUE;
+                fade =
+                {
+                    start = 0.0;
+                    stop = 0.4;
+                    stvalue = attribute {color = rgb(0.0,0.0,0.0);};
+                    spvalue = attribute {color = rgb(0.5,0.8,0.5);};
+                };
+                fade =
+                {
+                    start = 0.4;
+                    stop = 0.7;
+                    stvalue = attribute {color = rgb(0.5,0.8,0.5);};
+                    spvalue = attribute {color = rgb(0.3,0.3,0.9);};
+                };
+                fade =
+                {
+                    start = 0.7;
+                    stop = 1.0;
+                    stvalue = attribute {color = rgb(0.3,0.3,0.9);};
+                    spvalue = attribute {color = rgb(0.0,0.0,0.0);};
+                };
+                value = attribute {color = rgb(0.0,0.0,0.0);};
+            };
+        };
+    };
+};
+END

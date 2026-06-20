@@ -1,0 +1,114 @@
+OBJECTS = csg.o bound.o tri.o board.o box.o conic.o sphere.o\
+    mathfun.o raymain.o view.o writeppm.o init.o symtab.o\
+    parser.o attrib.o check.o range.o paramap.o mandel.o bitmap.o global.o\
+    support.o translat.o parse_tr.o sail.o lex.o
+
+CSOURCES = csg.c bound.c tri.c board.c box.c conic.c sphere.c\
+    mathfun.c raymain.c view.c writeppm.c init.c symtab.c\
+    parser.c attrib.c check.c range.c paramap.c mandel.c bitmap.c global.c\
+    support.c translat.c parse_tr.c sail.c lex.c
+
+CC = gcc
+CFLAGS = -c -O
+CDEFS = parse_tr.h parser.h tokens.h
+
+SAILINCLUDES = parse_tr.h sail.h support.h tokens.h
+RAYINCLUDES = mathtype.h mathfun.h structs.h
+SAILPUB = sailpub.h
+
+ray		: $(OBJECTS)
+	gcc $(OBJECTS) -lm -o ray
+
+raymain.o	: raymain.c $(RAYINCLUDES) $(SAILPUB) init.h view.h writeppm.h
+		$(CC) $(CFLAGS) raymain.c
+
+view.o	: view.c view.h $(RAYINCLUDES)
+		$(CC) $(CFLAGS) view.c
+
+init.o	: init.c init.h $(RAYINCLUDES) $(SAILPUB)
+		$(CC) $(CFLAGS) init.c
+
+mathfun.o	:  mathfun.c $(RAYINCLUDES)
+		$(CC) $(CFLAGS) mathfun.c
+
+writeppm.o	: writeppm.c writeppm.h $(RAYINCLUDES)
+		$(CC) $(CFLAGS) writeppm.c
+
+bound.o	:	bound.c bound.h $(RAYINCLUDES)
+		$(CC) $(CFLAGS) bound.c
+
+lex.o: lex.c
+		$(CC) $(CFLAGS) lex.c
+
+lex.c	: lex.l $(SAILINCLUDES)
+		flex lex.l
+		cp lex.yy.c lex.c
+		rm lex.yy.c
+
+parser.o	: parser.c
+		$(CC) $(CFLAGS) parser.c
+
+parser.c	: parser.y
+		yacc -d $(YFLAGS) parser.y
+		cp y.tab.c parser.c
+		cp y.tab.h tokens.h
+		rm y.tab.c y.tab.h
+
+parse_tr.o	: parse_tr.c tokens.h parse_tr.h
+		$(CC) $(CFLAGS) parse_tr.c
+
+translat.o	: translat.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) translat.c
+
+support.o	: support.c support.h
+		$(CC) $(CFLAGS) support.c
+
+symtab.o	: symtab.c support.h
+		$(CC) $(CFLAGS) symtab.c
+
+sail.o	: sail.c sail.h
+		$(CC) $(CFLAGS) sail.c
+
+# ADD_BELOW_FOR_MODULE
+
+global.o	: global.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) global.c
+
+paramap.o	: paramap.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) paramap.c
+
+check.o	: check.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) check.c
+
+range.o	: range.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) range.c
+
+bitmap.o	: bitmap.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) bitmap.c
+
+mandel.o	: mandel.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) mandel.c
+
+attrib.o	: attrib.c $(SAILINCLUDES)
+		$(CC) $(CFLAGS) attrib.c
+
+sphere.o	: sphere.c $(SAILINCLUDES) $(RAYINCLUDES)
+		$(CC) $(CFLAGS) sphere.c
+
+conic.o	: conic.c $(SAILINCLUDES) $(RAYINCLUDES)
+		$(CC) $(CFLAGS) conic.c
+
+box.o	: box.c $(SAILINCLUDES) $(RAYINCLUDES)
+		$(CC) $(CFLAGS) box.c
+
+board.o	: board.c $(SAILINCLUDES) $(RAYINCLUDES)
+		$(CC) $(CFLAGS) board.c
+
+tri.o	: tri.c $(SAILINCLUDES) $(RAYINCLUDES)
+		$(CC) $(CFLAGS) tri.c
+
+view.o	: view.c $(SAILINCLUDES) $(RAYINCLUDES)
+		$(CC) $(CFLAGS) view.c
+
+csg.o	: csg.c $(SAILINCLUDES) $(RAYINCLUDES)
+		$(CC) $(CFLAGS) csg.c

@@ -1,0 +1,23 @@
+# build artifacts
+/build/
+/ray
+
+# rendered output
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tga
+*.ppm
+
+# keep the original reference render
+!original/*.PPM
+
+# macOS
+.DS_Store
+
+# keep the README sample image
+!docs/cone.png
+
+# Claude Code local settings
+.claude/settings.local.json
