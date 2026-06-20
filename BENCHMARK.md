@@ -94,9 +94,25 @@ Ordered by effort-to-payoff. See git history / PRs for implementation.
 | 2 | ✅ **DONE** — multithread scanlines (pthreads + per-thread DB clone) | medium | **10.7× (measured)** | resolved via clone + `__thread` CSG scratch |
 | 3 | ✅ **DONE** — BVH/AABB spatial index in `trace()` | medium-high | **13× @ 400 objects (measured)** | resolved; per-thread, pixel-identical |
 | 4 | ✅ **DONE** — shadow cache (last-occluder reuse) | low | **~1.02–1.04× (measured)** | low; small now that the BVH already accelerates shadow rays |
-| 5 | `double` → `float` + **NEON / `<simd/simd.h>`** vector math | high | 1.5–2× | precision, broad change |
+| 5 | ❌ **REJECTED** — naive `double`→`float` (point/rgb types) | medium | **slower + crashed** | see findings below |
 | 6 | **SIMD ray packets** (4–8 rays/bundle, SoA) | high | 2–4× | large rewrite |
 | 7 | **Metal GPU** compute backend | very high | 10–100× | separate backend |
+
+### Item 5 findings — why scalar `float` was rejected
+Converting `point_type`/`rgb_type` from `double` to `float` (leaving math
+intermediates and matrices `double`) was implemented and measured, then
+reverted:
+- **Slower**, not faster: spheres 280 → 315 ms single-thread. Apple Silicon
+  has a full-throughput double FPU, so narrowing storage gives no compute win,
+  while the mixed float-storage / double-math paths add constant float↔double
+  **conversion** overhead on every component access.
+- **Crashed** (SIGSEGV) on `benchmark.json`: reduced precision pushed an index
+  out of bounds in the noise/CSG path.
+
+Lesson: a scalar type swap is the wrong lever here. Real SIMD gains require
+processing *multiple* values per instruction (item 6, ray packets in SoA
+layout) or moving to the GPU (item 7) — not narrowing the scalar type. Items
+1–4 (flags, threads, BVH) already deliver the bulk of the achievable CPU win.
 
 ### How the multithreading blocker was resolved (item 2)
 Intersection results are written into **shared** `prim_type.inter` fields during
