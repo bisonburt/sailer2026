@@ -213,28 +213,56 @@ render_ctx *ctx;
             printf("GPU: Metal not available — falling back to CPU\n");
         else
         {
-            /* Serialize spheres and pre-bake surface color via GetTexture */
-            MetalSphere *ms = (MetalSphere *) malloc((size_t)ngpu * sizeof(MetalSphere));
-            int si = 0;
-            for (pp = master_database; pp != NULL; pp = pp->next)
+            /* Build a BVH over the spheres and flatten it for the GPU. The
+               sphere array is emitted in BVH leaf order so that each leaf's
+               'first' index lines up with the GPU sphere buffer. */
+            bvh_t *gb = bvh_build(master_database);
+            int nnodes   = bvh_node_count(gb);
+            int nbounded = bvh_bounded_count(gb);
+            int si;
+
+            if (bvh_unbounded_count(gb) != 0)
             {
-                if (pp->isInCSG != 0) continue;
+                /* spheres always have a finite bound; this shouldn't happen */
+                printf("GPU: unbounded primitive present — falling back to CPU\n");
+                bvh_free(gb);
+                goto cpu_path;
+            }
+
+            /* Serialize spheres (in BVH order) and pre-bake surface color */
+            MetalSphere *ms = (MetalSphere *) malloc((size_t)nbounded * sizeof(MetalSphere));
+            for (si = 0; si < nbounded; si++)
+            {
+                prim_type *bp = bvh_bounded_prim(gb, si);
                 input_type  inp;
                 output_type out;
                 memset(&inp, 0, sizeof(inp));
-                GetTexture(pp->inter.data[0].SurfAttrib, &inp, &out);
-                ms[si].cx = (float)pp->prim.sphere.c.x;
-                ms[si].cy = (float)pp->prim.sphere.c.y;
-                ms[si].cz = (float)pp->prim.sphere.c.z;
-                ms[si].radius   = (float)pp->prim.sphere.r;
+                GetTexture(bp->inter.data[0].SurfAttrib, &inp, &out);
+                ms[si].cx = (float)bp->prim.sphere.c.x;
+                ms[si].cy = (float)bp->prim.sphere.c.y;
+                ms[si].cz = (float)bp->prim.sphere.c.z;
+                ms[si].radius   = (float)bp->prim.sphere.r;
                 ms[si].r        = (float)out.color.r;
                 ms[si].g        = (float)out.color.g;
                 ms[si].b        = (float)out.color.b;
-                ms[si].kdiff    = (float)pp->inter.data[0].kdiff;
-                ms[si].kspec    = (float)pp->inter.data[0].kspec;
+                ms[si].kdiff    = (float)bp->inter.data[0].kdiff;
+                ms[si].kspec    = (float)bp->inter.data[0].kspec;
                 ms[si].highlight= (float)out.highlight;
                 ms[si].pad0 = ms[si].pad1 = 0.0f;
-                si++;
+            }
+
+            /* Flatten BVH nodes for the GPU */
+            MetalBVHNode *mn = (MetalBVHNode *) malloc((size_t)(nnodes > 0 ? nnodes : 1) * sizeof(MetalBVHNode));
+            {
+                int ni;
+                for (ni = 0; ni < nnodes; ni++)
+                {
+                    float lo[3], hi[3];
+                    bvh_get_node(gb, ni, lo, hi, &mn[ni].left, &mn[ni].first, &mn[ni].count);
+                    mn[ni].lo[0]=lo[0]; mn[ni].lo[1]=lo[1]; mn[ni].lo[2]=lo[2]; mn[ni].lo[3]=0;
+                    mn[ni].hi[0]=hi[0]; mn[ni].hi[1]=hi[1]; mn[ni].hi[2]=hi[2]; mn[ni].hi[3]=0;
+                    mn[ni].pad = 0;
+                }
             }
 
             /* Camera vectors */
@@ -262,12 +290,13 @@ render_ctx *ctx;
 
             unsigned char *gpupix = (unsigned char *) malloc((size_t)(Width*Height*4));
 
-            printf("Rendering %s (%dx%d) on Metal GPU (%d spheres)...\n",
-                   outputfile, Width, Height, ngpu);
+            printf("Rendering %s (%dx%d) on Metal GPU (%d spheres, %d BVH nodes)...\n",
+                   outputfile, Width, Height, nbounded, nnodes);
             gettimeofday(&t0, NULL);
 
             int gret = metal_render_spheres(
-                ms, ngpu,
+                ms, nbounded,
+                mn, nnodes,
                 f_vp, f_M, f_H, f_V,
                 Width, Height,
                 f_lpos, f_lcol, f_amb, f_ac,
@@ -289,7 +318,7 @@ render_ctx *ctx;
                         rgb.b = gpupix[idx+2] / 255.0;
                         ImageSetPixel(x, y, rgb);
                     }
-                free(gpupix); free(ms);
+                free(gpupix); free(ms); free(mn); bvh_free(gb);
                 ImageSave(outputfile, outputquality);
                 ImageClose();
                 printf("render time: %.1f ms  (%.0f primary rays/sec, Metal GPU)\n",
@@ -297,10 +326,11 @@ render_ctx *ctx;
                 return;
             }
             printf("GPU: dispatch failed — falling back to CPU\n");
-            free(gpupix); free(ms);
+            free(gpupix); free(ms); free(mn); bvh_free(gb);
         }
     }
 
+cpu_path:
     n = num_threads;
     if (n < 1) n = 1;
     if (n > Height) n = Height; /* no point having idle threads */

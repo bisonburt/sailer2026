@@ -217,11 +217,13 @@ bvh_t *bvh_build(prim_type *database)
 #ifdef __ARM_NEON
 static int ray_aabb(const aabb_t *bx, const ray_inv_t *ri)
 {
-    /* XY axes in a single NEON pass (float64x2_t = 2 doubles, 128-bit) */
-    float64x2_t lo   = {bx->lo.x, bx->lo.y};
-    float64x2_t hi   = {bx->hi.x, bx->hi.y};
-    float64x2_t s    = {ri->sx, ri->sy};
-    float64x2_t inv  = {ri->inv_dx, ri->inv_dy};
+    /* XY axes in a single NEON pass (float64x2_t = 2 doubles, 128-bit).
+       lo.x/lo.y, hi.x/hi.y, sx/sy and inv_dx/inv_dy are each laid out
+       contiguously, so load them as 128-bit vectors directly. */
+    float64x2_t lo   = vld1q_f64(&bx->lo.x);
+    float64x2_t hi   = vld1q_f64(&bx->hi.x);
+    float64x2_t s    = vld1q_f64(&ri->sx);
+    float64x2_t inv  = vld1q_f64(&ri->inv_dx);
     float64x2_t t1   = vmulq_f64(vsubq_f64(lo, s), inv);
     float64x2_t t2   = vmulq_f64(vsubq_f64(hi, s), inv);
     float64x2_t tlo  = vminq_f64(t1, t2);
@@ -309,4 +311,46 @@ void bvh_free(bvh_t *b)
     free(b->order);
     free(b->unbounded);
     free(b);
+}
+
+/* ---- Flattened-node access for GPU export ---- */
+
+int bvh_node_count(const bvh_t *b)
+{
+    return (b == NULL) ? 0 : b->nnodes;
+}
+
+void bvh_get_node(const bvh_t *b, int i,
+                  float lo[3], float hi[3],
+                  int *left, int *first, int *count)
+{
+    /* Expand the box by a small epsilon so the float GPU slab test stays
+       conservative against the double-precision build (avoids dropping
+       rays that graze a box edge). */
+    const double eps = 1e-4;
+    const node_t *n = &b->nodes[i];
+    lo[0] = (float)(n->box.lo.x - eps);
+    lo[1] = (float)(n->box.lo.y - eps);
+    lo[2] = (float)(n->box.lo.z - eps);
+    hi[0] = (float)(n->box.hi.x + eps);
+    hi[1] = (float)(n->box.hi.y + eps);
+    hi[2] = (float)(n->box.hi.z + eps);
+    *left  = n->left;
+    *first = n->first;
+    *count = n->count;
+}
+
+int bvh_bounded_count(const bvh_t *b)
+{
+    return (b == NULL) ? 0 : b->nbounded;
+}
+
+prim_type *bvh_bounded_prim(const bvh_t *b, int i)
+{
+    return b->order[i];
+}
+
+int bvh_unbounded_count(const bvh_t *b)
+{
+    return (b == NULL) ? 0 : b->nunbounded;
 }

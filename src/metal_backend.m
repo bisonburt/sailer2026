@@ -44,10 +44,14 @@ static const char *kShaderSrc =
 "};\n"
 "struct Camera {\n"
 "    float4 vp, M, H, V;\n"
-"    int width, height, maxdepth, _pad;\n"
+"    int width, height, maxdepth, nnodes;\n"
 "};\n"
 "struct Light {\n"
 "    float4 pos, color, ambient; /* ambient.w = ambcoef */\n"
+"};\n"
+"struct BVHNode {\n"
+"    float4 lo, hi;       /* xyz = box min/max */\n"
+"    int left, first, count, pad;\n"
 "};\n"
 "\n"
 "/* Returns entry distance t, or -1 if miss. */\n"
@@ -65,13 +69,75 @@ static const char *kShaderSrc =
 "    return (vi > 1e-4) ? vi : vo;\n"
 "}\n"
 "\n"
+"/* Branchless ray/AABB slab test (inv = 1/rd, guarded against 0). */\n"
+"static bool slab(float3 lo, float3 hi, float3 ro, float3 inv)\n"
+"{\n"
+"    float3 t0 = (lo - ro) * inv;\n"
+"    float3 t1 = (hi - ro) * inv;\n"
+"    float3 tlo = min(t0, t1);\n"
+"    float3 thi = max(t0, t1);\n"
+"    float tmin = max(max(tlo.x, tlo.y), tlo.z);\n"
+"    float tmax = min(min(thi.x, thi.y), thi.z);\n"
+"    return tmax >= 0.0 && tmin <= tmax;\n"
+"}\n"
+"\n"
+"struct HitRec { float t; int idx; };\n"
+"\n"
+"/* Closest-hit BVH traversal (primary / reflection rays). */\n"
+"static HitRec bvh_closest(device const Sphere *sph, device const BVHNode *nodes,\n"
+"                          float3 ro, float3 rd)\n"
+"{\n"
+"    HitRec h; h.t = 1e10; h.idx = -1;\n"
+"    float3 inv = select(1.0/rd, float3(1e30), fabs(rd) < 1e-8);\n"
+"    int stack[64]; int sp = 0; stack[sp++] = 0;\n"
+"    while (sp > 0) {\n"
+"        BVHNode n = nodes[stack[--sp]];\n"
+"        if (!slab(n.lo.xyz, n.hi.xyz, ro, inv)) continue;\n"
+"        if (n.count > 0) {\n"
+"            for (int i = 0; i < n.count; i++) {\n"
+"                int si = n.first + i;\n"
+"                float t = sphere_t(ro, rd, sph[si].pos_r.xyz, sph[si].pos_r.w);\n"
+"                if (t > 0.0 && t < h.t) { h.t = t; h.idx = si; }\n"
+"            }\n"
+"        } else {\n"
+"            stack[sp++] = n.left;\n"
+"            stack[sp++] = n.first;\n"
+"        }\n"
+"    }\n"
+"    return h;\n"
+"}\n"
+"\n"
+"/* Any-hit BVH traversal (shadow rays): true if an occluder is closer than maxd. */\n"
+"static bool bvh_shadow(device const Sphere *sph, device const BVHNode *nodes,\n"
+"                       float3 ro, float3 rd, float maxd)\n"
+"{\n"
+"    float3 inv = select(1.0/rd, float3(1e30), fabs(rd) < 1e-8);\n"
+"    int stack[64]; int sp = 0; stack[sp++] = 0;\n"
+"    while (sp > 0) {\n"
+"        BVHNode n = nodes[stack[--sp]];\n"
+"        if (!slab(n.lo.xyz, n.hi.xyz, ro, inv)) continue;\n"
+"        if (n.count > 0) {\n"
+"            for (int i = 0; i < n.count; i++) {\n"
+"                int si = n.first + i;\n"
+"                float t = sphere_t(ro, rd, sph[si].pos_r.xyz, sph[si].pos_r.w);\n"
+"                if (t > 0.001 && t < maxd) return true;\n"
+"            }\n"
+"        } else {\n"
+"            stack[sp++] = n.left;\n"
+"            stack[sp++] = n.first;\n"
+"        }\n"
+"    }\n"
+"    return false;\n"
+"}\n"
+"\n"
 "kernel void ray_trace_spheres(\n"
-"    device const Sphere *spheres [[buffer(0)]],\n"
-"    constant uint        &nsph   [[buffer(1)]],\n"
-"    device   uchar4      *pixels [[buffer(2)]],\n"
-"    constant Camera      &cam    [[buffer(3)]],\n"
-"    constant Light       &light  [[buffer(4)]],\n"
-"    constant float3      &sky    [[buffer(5)]],\n"
+"    device const Sphere  *spheres [[buffer(0)]],\n"
+"    constant uint        &nsph    [[buffer(1)]],\n"
+"    device   uchar4      *pixels  [[buffer(2)]],\n"
+"    constant Camera      &cam     [[buffer(3)]],\n"
+"    constant Light       &light   [[buffer(4)]],\n"
+"    constant float3      &sky     [[buffer(5)]],\n"
+"    device const BVHNode *nodes   [[buffer(6)]],\n"
 "    uint2 gid [[thread_position_in_grid]])\n"
 "{\n"
 "    if ((int)gid.x >= cam.width || (int)gid.y >= cam.height) return;\n"
@@ -88,12 +154,18 @@ static const char *kShaderSrc =
 "    float  weight = 1.0;\n"
 "    float ambcoef = light.ambient.w;\n"
 "\n"
+"    bool useBVH = (cam.nnodes > 0);\n"
 "    for (int depth = 0; depth <= cam.maxdepth && weight > 0.001; depth++) {\n"
-"        /* closest sphere */\n"
+"        /* closest sphere: BVH traversal, or linear scan if no BVH */\n"
 "        float best = 1e10;  int bi = -1;\n"
-"        for (uint i = 0; i < nsph; i++) {\n"
-"            float t = sphere_t(ro, rd, spheres[i].pos_r.xyz, spheres[i].pos_r.w);\n"
-"            if (t > 0.0 && t < best) { best = t; bi = (int)i; }\n"
+"        if (useBVH) {\n"
+"            HitRec h = bvh_closest(spheres, nodes, ro, rd);\n"
+"            best = h.t; bi = h.idx;\n"
+"        } else {\n"
+"            for (uint i = 0; i < nsph; i++) {\n"
+"                float t = sphere_t(ro, rd, spheres[i].pos_r.xyz, spheres[i].pos_r.w);\n"
+"                if (t > 0.0 && t < best) { best = t; bi = (int)i; }\n"
+"            }\n"
 "        }\n"
 "        if (bi < 0) { color += weight * sky; break; }\n"
 "\n"
@@ -104,11 +176,16 @@ static const char *kShaderSrc =
 "        /* shadow */\n"
 "        float3 litdir = light.pos.xyz - hit;\n"
 "        float  ldist  = length(litdir); litdir /= ldist;\n"
+"        float3 sorig  = hit + nor*0.001;\n"
 "        bool   shadow = false;\n"
-"        for (uint i = 0; i < nsph; i++) {\n"
-"            float t = sphere_t(hit + nor*0.001, litdir,\n"
-"                               spheres[i].pos_r.xyz, spheres[i].pos_r.w);\n"
-"            if (t > 0.001 && t < ldist) { shadow = true; break; }\n"
+"        if (useBVH) {\n"
+"            shadow = bvh_shadow(spheres, nodes, sorig, litdir, ldist);\n"
+"        } else {\n"
+"            for (uint i = 0; i < nsph; i++) {\n"
+"                float t = sphere_t(sorig, litdir,\n"
+"                                   spheres[i].pos_r.xyz, spheres[i].pos_r.w);\n"
+"                if (t > 0.001 && t < ldist) { shadow = true; break; }\n"
+"            }\n"
 "        }\n"
 "\n"
 "        float3 sc  = spheres[bi].col_kd.xyz;\n"
@@ -193,6 +270,7 @@ int metal_available(void)
 
 int metal_render_spheres(
     const MetalSphere *spheres, int nspheres,
+    const MetalBVHNode *nodes, int nnodes,
     float vp[3], float M[3], float H[3], float V[3],
     int width, int height,
     float light_pos[3], float light_rgb[3],
@@ -210,6 +288,12 @@ int metal_render_spheres(
                    length:(NSUInteger)(nspheres * sizeof(MetalSphere))
                   options:MTLResourceStorageModeShared];
 
+    /* BVH nodes (at least one element so the buffer is never zero-length) */
+    id<MTLBuffer> bNodes = [g_device
+        newBufferWithBytes:(nnodes > 0 ? (const void *)nodes : (const void *)spheres)
+                   length:(NSUInteger)((nnodes > 0 ? nnodes : 1) * sizeof(MetalBVHNode))
+                  options:MTLResourceStorageModeShared];
+
     uint32_t nsph32 = (uint32_t)nspheres;
     id<MTLBuffer> bNsph = [g_device
         newBufferWithBytes:&nsph32
@@ -225,7 +309,7 @@ int metal_render_spheres(
     cam.M[0]=M[0];   cam.M[1]=M[1];   cam.M[2]=M[2];   cam.M[3]=0;
     cam.H[0]=H[0];   cam.H[1]=H[1];   cam.H[2]=H[2];   cam.H[3]=0;
     cam.V[0]=V[0];   cam.V[1]=V[1];   cam.V[2]=V[2];   cam.V[3]=0;
-    cam.width=width; cam.height=height; cam.maxdepth=maxdepth; cam._pad=0;
+    cam.width=width; cam.height=height; cam.maxdepth=maxdepth; cam._pad=nnodes;
     id<MTLBuffer> bCam = [g_device
         newBufferWithBytes:&cam length:sizeof(cam) options:MTLResourceStorageModeShared];
 
@@ -251,6 +335,7 @@ int metal_render_spheres(
     [enc setBuffer:bCam     offset:0 atIndex:3];
     [enc setBuffer:bLight   offset:0 atIndex:4];
     [enc setBuffer:bSky     offset:0 atIndex:5];
+    [enc setBuffer:bNodes   offset:0 atIndex:6];
 
     NSUInteger tgsize = g_pipe.maxTotalThreadsPerThreadgroup;
     if (tgsize > 256) tgsize = 256;

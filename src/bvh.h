@@ -32,4 +32,18 @@ void bvh_traverse(const bvh_t *b, const ray_type *ray,
 
 void bvh_free(bvh_t *b);
 
+/* ---- Flattened-node access, for exporting the BVH to the GPU ----
+   Nodes are stored in a flat array; node 0 is the root. A node is a leaf
+   when count>0 (first = start index into the ordered bounded-prim list);
+   otherwise it is internal (left = left child node index, first = right
+   child node index). The box is returned slightly expanded for a
+   conservative float test. */
+int  bvh_node_count(const bvh_t *b);
+void bvh_get_node(const bvh_t *b, int i,
+                  float lo[3], float hi[3],
+                  int *left, int *first, int *count);
+int  bvh_bounded_count(const bvh_t *b);
+prim_type *bvh_bounded_prim(const bvh_t *b, int i);
+int  bvh_unbounded_count(const bvh_t *b);
+
 #endif /* BVH_H */

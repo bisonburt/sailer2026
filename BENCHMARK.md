@@ -118,8 +118,10 @@ layout) or moving to the GPU (item 7) — not narrowing the scalar type. Items
 
 ARM NEON `float64x2_t` processes two slab axes (X and Y) in one SIMD
 pass; Z is scalar. Reciprocal ray directions are precomputed once per
-`bvh_traverse` call (eliminating per-AABB division). Non-ARM builds
-fall back to the same branchless scalar path with precomputed reciprocals.
+`bvh_traverse` call (eliminating per-AABB division), and the lo/hi/origin/
+inv pairs are loaded with contiguous `vld1q_f64` rather than element-wise
+inserts. Non-ARM builds fall back to the same branchless scalar path with
+precomputed reciprocals.
 
 | Scene | Before SIMD | After SIMD | Speedup |
 |---|---|---|---|
@@ -127,30 +129,49 @@ fall back to the same branchless scalar path with precomputed reciprocals.
 | spheres (400 obj, 15 threads) | 29.5 ms | 23.4 ms | **1.26×** |
 
 BVH traversal is not the bottleneck on the 13-object benchmark; the gain
-is visible where there are enough objects that AABB tests dominate.
+is visible where there are enough objects that AABB tests dominate. The
+remaining CPU SIMD headroom is in a 4-wide BVH (QBVH) that tests four
+child boxes per node, or ray packets — both larger rewrites.
 
-### Metal GPU backend (item 7)
+### Metal GPU backend + GPU BVH (item 7)
 
 `--gpu` flag enables the Metal path. Scene must contain only sphere
 top-level primitives; any non-sphere prim causes automatic CPU fallback.
-The GPU executes a per-pixel compute kernel: ray generation → linear
-sphere scan → shadow ray → Phong shading → iterative reflections up to
-`maxdepth`. The Metal shader is compiled from embedded source at startup
-(no `xcrun`/`metallib` build step).
+The GPU executes a per-pixel compute kernel: ray generation → **BVH
+traversal** → shadow ray (any-hit BVH) → Phong shading → iterative
+reflections up to `maxdepth`. The Metal shader is compiled from embedded
+source at startup (no `xcrun`/`metallib` build step).
+
+The CPU-built BVH is flattened into a GPU node buffer (node 0 = root;
+leaf `first` indexes a sphere array emitted in BVH leaf order) and
+traversed with a per-thread explicit stack. Boxes are expanded by a small
+epsilon on export so the `float32` GPU slab test stays conservative
+against the `double` build.
 
 GPU renders in `float32`; CPU uses `double` throughout. Outputs are
-visually identical (mean per-channel diff < 0.7/255); occasional
-silhouette edge pixels may differ due to precision.
+visually identical (mean per-channel diff < 0.7/255, ~0.06 % of pixels
+differ, all at silhouette edges).
 
-| Scene | CPU (15 threads + BVH) | Metal GPU | GPU vs CPU |
+**Linear GPU scan vs GPU BVH** — adding the BVH made the GPU faster at
+*every* size and made object count nearly free (O(log N) per ray):
+
+| Scene | GPU linear (old) | GPU + BVH (now) |
+|---|---|---|
+| 400 spheres 4K   | 41.9 ms | **11.7 ms** |
+| 5000 spheres 1080p | 155 ms | **11.6 ms** |
+
+**GPU + BVH vs CPU (15 threads + BVH)** — best of 3, warm:
+
+| Scene | CPU (15t) | GPU + BVH | Speedup |
 |---|---|---|---|
-| 400 spheres 800×800 | 5.8 ms | 7.8 ms warm | 0.74× (CPU wins; BVH > GPU linear) |
-| 400 spheres 1080p | 23 ms | 27 ms warm | 0.85× |
-| 400 spheres 4K | 46.5 ms | **41.9 ms** | **1.11×** (GPU wins at high res) |
+| 400 spheres 800×800   | 5.5 ms  | 3.5 ms  | 1.6× |
+| 1000 spheres 1080p    | 24.8 ms | 7.8 ms  | 3.2× |
+| 400 spheres 4K        | 47.0 ms | 11.7 ms | 4.0× |
+| 5000 spheres 1080p    | 78.2 ms | 11.6 ms | **6.7×** |
 
-The GPU crossover is at approximately 4K resolution for sphere-only scenes.
-The GPU linear scan is O(N) per ray; a GPU BVH would push the crossover to
-lower resolutions and extend the advantage to larger scenes.
+With the GPU BVH the GPU now wins across the board (the earlier linear
+scan only won at 4K). Because traversal is O(log N), the 5000-sphere
+scene costs barely more than the 400-sphere scene at the same resolution.
 
 ### How the multithreading blocker was resolved (item 2)
 Intersection results are written into **shared** `prim_type.inter` fields during

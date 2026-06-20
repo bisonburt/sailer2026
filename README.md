@@ -21,13 +21,14 @@ make                                  # builds ./ray
 ```
 
 ```
-usage: ray <scene.json> [-o output.png] [-q quality] [-t threads]
+usage: ray <scene.json> [-o output.png] [-q quality] [-t threads] [--gpu]
 
   <scene.json>     JSON scene description (required)
   -o, --output F   output image; format chosen from the extension
                    (.png .jpg .jpeg .bmp .tga .ppm). default: <scene>.png
   -q, --quality N  JPEG quality 1..100 (default 90)
   -t, --threads N  render threads (default: all cores; 1 = serial)
+  --gpu            render on the Metal GPU (sphere-only scenes; auto CPU fallback)
   -h, --help       help
 ```
 
@@ -37,16 +38,24 @@ usage: ray <scene.json> [-o output.png] [-q quality] [-t threads]
 
 The renderer is **multithreaded** (pthreads, one render gives each thread a
 private clone of the scene so it's lock-free) and uses a **BVH** spatial index
-so `trace()` scales toward O(log N) in object count. On a 15-core Apple M5 Pro
-the threading alone is ~10.7×; the BVH adds ~13× on a 400-object scene; together
-a 400-sphere scene drops from ~4 s to ~30 ms. All optimizations produce
-pixel-identical output. See [BENCHMARK.md](BENCHMARK.md) for the baseline,
-methodology, and roadmap.
+so `trace()` scales toward O(log N) in object count. The BVH's AABB slab test
+is **NEON SIMD** on Apple Silicon. On a 15-core Apple M5 Pro the threading
+alone is ~10.7×; the BVH adds ~13× on a 400-object scene; together a
+400-sphere scene drops from ~4 s to ~25 ms.
+
+There is also an optional **Metal GPU backend** (`--gpu`) for sphere-only
+scenes that runs a per-pixel compute kernel with a **GPU BVH** traversal —
+3–7× faster than the multithreaded CPU path, and nearly flat in object count
+(5000 spheres at 1080p in ~12 ms). Non-sphere scenes fall back to the CPU
+automatically. See [BENCHMARK.md](BENCHMARK.md) for the baseline, methodology,
+and full comparison tables.
 
 ```sh
 make release           # -O3 -ffast-math -flto -mcpu tuned build
-make bench             # time the benchmark scene 5x
-./ray scenes/benchmark.json -t 15
+make bench             # time the benchmark scene 5x (CPU)
+make bench-gpu         # time a sphere scene on the GPU
+./ray scenes/spheres.json -t 15      # CPU
+./ray scenes/spheres_gpu.json --gpu  # Metal GPU
 ```
 
 ---

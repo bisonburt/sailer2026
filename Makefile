@@ -64,9 +64,9 @@ run: $(BIN)
 bench: $(BIN)
 	@for i in 1 2 3 4 5; do ./$(BIN) scenes/benchmark.json -o /tmp/bench.png | grep "render time"; done
 
-# GPU benchmark on the spheres scene (sphere-only; Metal-compatible)
+# GPU benchmark on a sphere-only scene (Metal-compatible; CPU fallback otherwise)
 bench-gpu: $(BIN)
-	@for i in 1 2 3; do ./$(BIN) scenes/spheres.json --gpu -o /tmp/bench_gpu.png | grep "render time"; done
+	@for i in 1 2 3; do ./$(BIN) scenes/spheres_gpu.json --gpu -o /tmp/bench_gpu.png | grep "render time"; done
 
 clean:
 	rm -rf $(BUILD) $(BIN)

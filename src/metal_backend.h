@@ -21,6 +21,18 @@ typedef struct {
     float kspec, highlight, pad0, pad1; /* specular coeff, highlight exponent */
 } MetalSphere;
 
+/* Flattened BVH node (layout must match the MSL shader's BVHNode struct).
+   Leaf when count>0 (first = start index into the sphere array, which is in
+   BVH leaf order); otherwise internal (left/first = child node indices). */
+typedef struct {
+    float lo[4];    /* xyz = box min (w unused, padding) */
+    float hi[4];    /* xyz = box max (w unused, padding) */
+    int   left;     /* internal: left child node index; leaf: -1 */
+    int   first;    /* leaf: sphere start index; internal: right child index */
+    int   count;    /* leaf: sphere count; internal: 0 */
+    int   pad;
+} MetalBVHNode;
+
 /* Returns 1 if a Metal device is available, 0 otherwise. */
 int metal_available(void);
 
@@ -37,10 +49,15 @@ int metal_available(void);
     ambcoef           ambient coefficient
     sky_rgb           background color for rays that hit nothing
     maxdepth          max reflection depth
+    nodes / nnodes    flattened BVH (node 0 = root). If nnodes>0 the GPU
+                      traverses the BVH; if 0 it falls back to a linear scan.
+                      When a BVH is supplied, 'spheres' must be in BVH leaf
+                      order (so leaf 'first' indices line up).
     out_pixels        caller-allocated RGBA8 buffer, width*height*4 bytes
 */
 int metal_render_spheres(
     const MetalSphere *spheres, int nspheres,
+    const MetalBVHNode *nodes, int nnodes,
     float vp[3], float M[3], float H[3], float V[3],
     int width, int height,
     float light_pos[3], float light_rgb[3],
