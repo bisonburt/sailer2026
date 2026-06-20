@@ -21,16 +21,31 @@ make                                  # builds ./ray
 ```
 
 ```
-usage: ray <scene.json> [-o output.png] [-q quality]
+usage: ray <scene.json> [-o output.png] [-q quality] [-t threads]
 
   <scene.json>     JSON scene description (required)
   -o, --output F   output image; format chosen from the extension
                    (.png .jpg .jpeg .bmp .tga .ppm). default: <scene>.png
   -q, --quality N  JPEG quality 1..100 (default 90)
+  -t, --threads N  render threads (default: all cores; 1 = serial)
   -h, --help       help
 ```
 
 `make run` builds and renders the sample scene in one step.
+
+### Performance
+
+The renderer is **multithreaded** (pthreads, one render gives each thread a
+private clone of the scene so it's lock-free) and scales near-linearly with
+cores — ~10.7× on a 15-core Apple M5 Pro, ~13.4× combined with the optimized
+`make release` build, all producing pixel-identical output. See
+[BENCHMARK.md](BENCHMARK.md) for the baseline, methodology, and roadmap.
+
+```sh
+make release           # -O3 -ffast-math -flto -mcpu tuned build
+make bench             # time the benchmark scene 5x
+./ray scenes/benchmark.json -t 15
+```
 
 ---
 

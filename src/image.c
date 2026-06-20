@@ -59,6 +59,17 @@ void ImagePutPixel(rgb_type rgb)
     g_pixels[g_index++] = clamp_byte(rgb.b);
 }
 
+void ImageSetPixel(int x, int y, rgb_type rgb)
+{
+    long idx;
+    if (g_pixels == NULL) return;
+    if (x < 0 || y < 0 || x >= g_width || y >= g_height) return;
+    idx = ((long)y * g_width + x) * 3;
+    g_pixels[idx + 0] = clamp_byte(rgb.r);
+    g_pixels[idx + 1] = clamp_byte(rgb.g);
+    g_pixels[idx + 2] = clamp_byte(rgb.b);
+}
+
 /* Lower-case file extension (without the dot), or "" if none. */
 static const char *file_ext(const char *path)
 {

@@ -15,17 +15,18 @@
 #include <string.h>
 
 /* defined in raymain.c */
-int ProcessImage(const char *infile, const char *outfile, int quality);
+int ProcessImage(const char *infile, const char *outfile, int quality, int threads);
 
 static void usage(const char *prog)
 {
     printf("SAILER ray tracer (2026 JSON edition)\n");
-    printf("usage: %s <scene.json> [-o output.png] [-q quality]\n", prog);
+    printf("usage: %s <scene.json> [-o output.png] [-q quality] [-t threads]\n", prog);
     printf("\n");
     printf("  <scene.json>     JSON scene description (required)\n");
     printf("  -o, --output F   output image; format from extension\n");
     printf("                   (.png .jpg .jpeg .bmp .tga .ppm). default: <scene>.png\n");
     printf("  -q, --quality N  JPEG quality 1..100 (default 90)\n");
+    printf("  -t, --threads N  render threads (default: all cores; 1 = serial)\n");
     printf("  -h, --help       this help\n");
 }
 
@@ -48,6 +49,7 @@ int main(int argc, char *argv[])
     const char *outfile = NULL;
     char outbuf[1024];
     int quality = 90;
+    int threads = 0; /* 0 = auto (all cores) */
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -60,6 +62,9 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "-q") == 0 || strcmp(argv[i], "--quality") == 0) {
             if (++i >= argc) { fprintf(stderr, "error: -q needs an argument\n"); return 1; }
             quality = atoi(argv[i]);
+        } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--threads") == 0) {
+            if (++i >= argc) { fprintf(stderr, "error: -t needs an argument\n"); return 1; }
+            threads = atoi(argv[i]);
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "error: unknown option %s\n", argv[i]);
             usage(argv[0]);
@@ -83,5 +88,5 @@ int main(int argc, char *argv[])
     }
 
     printf("SAILER: rendering %s -> %s\n", infile, outfile);
-    return ProcessImage(infile, outfile, quality);
+    return ProcessImage(infile, outfile, quality, threads);
 }

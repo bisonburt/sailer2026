@@ -24,6 +24,8 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <pthread.h>
+#include <unistd.h>
 #include "mathtype.h"
 #include "structs.h"
 #include "init.h"
@@ -31,9 +33,6 @@
 #include "mathfun.h"
 #include "image.h"
 #include "sailpub.h"
-
-/* global vars for stats */
-static int G_NormalRays=0,G_ShadowRays=0,G_ShadowCacheHit=0;
 
 /* protos for some sail functions */
 void GetBackgroundInfo(double *,struct sail_module_struct **);
@@ -45,8 +44,12 @@ static rgb_type ambient,lightcolor;
 static double ambcoef,bkgrndsize;
 static point_type lightsrc;
 static struct sail_module_struct *bkgrndmodule;
-static prim_type *database;
+/* The shared, read-only master scene; each render thread gets its own clone
+   in the thread-local 'database' that trace() and the sect_*() funcs use. */
+static prim_type *master_database;
+static __thread prim_type *database;
 static int maxdepth;
+static int num_threads = 1;
 static char buff[128];
 static char outputfile[1024];
 static int  outputquality = 90;
@@ -63,7 +66,7 @@ void raytrace(void);
     Returns 0 on success, non-zero on error.
 ======================================
 */
-int ProcessImage(const char *infile, const char *outfile, int quality)
+int ProcessImage(const char *infile, const char *outfile, int quality, int threads)
 {
     if (InitSail((char *)infile) == FALSE)
     {
@@ -74,7 +77,18 @@ int ProcessImage(const char *infile, const char *outfile, int quality)
     snprintf(outputfile, sizeof(outputfile), "%s", outfile);
     outputquality = quality;
 
-    database = GetObjectDataBase();
+    /* threads <= 0 means "auto": use all online cores */
+    if (threads <= 0)
+    {
+        long n = sysconf(_SC_NPROCESSORS_ONLN);
+        num_threads = (n > 0) ? (int)n : 1;
+    }
+    else
+    {
+        num_threads = threads;
+    }
+
+    master_database = GetObjectDataBase();
     GetBackgroundInfo(&bkgrndsize,&bkgrndmodule);
     GetLightingInfo(&ambient,&ambcoef,&lightsrc,&lightcolor);
     GetMaxDepth(&maxdepth);
@@ -88,38 +102,41 @@ int ProcessImage(const char *infile, const char *outfile, int quality)
 
 /*
 ======================================
-    raytrace()
+    render_worker()
+    Each worker renders an interleaved set of scanlines
+    (row r handled by thread r % nthreads, for load balance).
+    It owns a private clone of the scene database so the per-object
+    intersection scratch in trace()/sect_*() is never shared.
 ======================================
 */
-void raytrace()
+typedef struct
 {
-static prim_type *keyp;
-static ray_type ray;
-static point_type hit,nor,lite;
-static rgb_type rayrgb;
-static int x,y;
-static int Width,Height;
-struct timeval t0,t1;
-double render_ms;
+    int thread_id;
+    int nthreads;
+    int width;
+    int height;
+    point_type viewpoint;
+    point_type lite;
+} render_ctx;
 
+static void *render_worker(void *arg)
+{
+    render_ctx *c = (render_ctx *)arg;
+    ray_type ray;
+    point_type hit,nor;
+    prim_type *keyp;
+    rgb_type rayrgb;
+    int x,y;
+    int cloned = (c->nthreads > 1);
 
-    Width = GetWidth();
-    Height = GetHeight();
+    /* thread-local scene: clone for parallel runs, share for single-thread */
+    database = cloned ? CloneObjectDatabase(master_database) : master_database;
 
-    if (ImageOpen(Width,Height) != 0)
-        return;
+    ray.s = c->viewpoint;
 
-    lite = lightsrc;
-    ray.s = *GetViewpoint();
-
-    /* time only the ray-tracing work, excluding image encode/write */
-    gettimeofday(&t0,NULL);
-    for (y=0; y < Height; y++)
+    for (y = c->thread_id; y < c->height; y += c->nthreads)
     {
-        /* progress every ~6% so stdout I/O does not skew the benchmark */
-        if ((y % ((Height/16) + 1)) == 0)
-            printf("Rendering %s, line %d/%d\n",outputfile,y+1,Height);
-        for (x=0; x < Width; x++)
+        for (x = 0; x < c->width; x++)
         {
             GetView(x,y,&ray.d);
             ray.d.x -= ray.s.x;
@@ -127,19 +144,80 @@ double render_ms;
             ray.d.z -= ray.s.z;
             normalize(&ray.d); /* normalize ray */
             trace(&keyp,NULL,&ray,&hit,&nor,0.0);
-            Illum(keyp,ray.d,hit,nor,lite,&rayrgb,0);
-            ImagePutPixel(rayrgb);
+            Illum(keyp,ray.d,hit,nor,c->lite,&rayrgb,0);
+            ImageSetPixel(x,y,rayrgb);
         }
     }
+
+    if (cloned) /* release this thread's clone (shared modules untouched) */
+    {
+        prim_type *pp = database, *nx;
+        while (pp != NULL) { nx = pp->next; free(pp); pp = nx; }
+    }
+    return NULL;
+}
+
+/*
+======================================
+    raytrace()
+======================================
+*/
+void raytrace()
+{
+int Width,Height;
+int n,t;
+struct timeval t0,t1;
+double render_ms;
+pthread_t *tids;
+render_ctx *ctx;
+
+    Width = GetWidth();
+    Height = GetHeight();
+
+    if (ImageOpen(Width,Height) != 0)
+        return;
+
+    n = num_threads;
+    if (n < 1) n = 1;
+    if (n > Height) n = Height; /* no point having idle threads */
+
+    printf("Rendering %s (%dx%d) with %d thread%s...\n",
+           outputfile,Width,Height,n,(n==1?"":"s"));
+
+    /* time only the ray-tracing work, excluding image encode/write */
+    gettimeofday(&t0,NULL);
+
+    if (n == 1)
+    {
+        render_ctx c;
+        c.thread_id = 0; c.nthreads = 1;
+        c.width = Width; c.height = Height;
+        c.viewpoint = *GetViewpoint(); c.lite = lightsrc;
+        render_worker(&c);
+    }
+    else
+    {
+        tids = (pthread_t *) malloc(n * sizeof(pthread_t));
+        ctx  = (render_ctx *) malloc(n * sizeof(render_ctx));
+        for (t = 0; t < n; t++)
+        {
+            ctx[t].thread_id = t; ctx[t].nthreads = n;
+            ctx[t].width = Width; ctx[t].height = Height;
+            ctx[t].viewpoint = *GetViewpoint(); ctx[t].lite = lightsrc;
+            pthread_create(&tids[t],NULL,render_worker,&ctx[t]);
+        }
+        for (t = 0; t < n; t++)
+            pthread_join(tids[t],NULL);
+        free(tids);
+        free(ctx);
+    }
+
     gettimeofday(&t1,NULL);
     render_ms = (t1.tv_sec - t0.tv_sec)*1000.0 + (t1.tv_usec - t0.tv_usec)/1000.0;
 	ImageSave(outputfile,outputquality);
 	ImageClose();
-    printf("render time: %.1f ms  (%.0f primary rays/sec)\n",
-           render_ms, (double)Width*Height / (render_ms/1000.0));
-    printf("Normal Rays: %d\n",G_NormalRays);
-    printf("Shadow Rays: %d\n",G_ShadowRays);
-    printf("Shadow Cache Hits: %d\n",G_ShadowCacheHit);
+    printf("render time: %.1f ms  (%.0f primary rays/sec, %d threads)\n",
+           render_ms, (double)Width*Height / (render_ms/1000.0), n);
     return;
 }
 
@@ -168,7 +246,6 @@ int stest;
             u = cur->inter.data[0].u;
             if (stest)
             {
-                G_ShadowRays++;
                 if(cur->hit > 0 && (u < shadow))
                 {
                     /*  we hit an object between the light source
@@ -181,7 +258,6 @@ int stest;
             }
             else
             {
-                G_NormalRays++;
                 if((cur->hit > 0) && (u < usec))
                 {
                     /* we hit an object */

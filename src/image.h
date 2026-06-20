@@ -19,6 +19,10 @@ int ImageOpen(int width, int height);
    top-to-bottom, exactly as the original WritePPM was called. */
 void ImagePutPixel(rgb_type rgb);
 
+/* Write a pixel at an explicit (x,y). Thread-safe when callers write
+   disjoint pixels (e.g. one scanline per thread). Components 0.0 .. 1.0. */
+void ImageSetPixel(int x, int y, rgb_type rgb);
+
 /* Write the framebuffer to 'path'. Format is selected from the extension.
    For JPEG, 'quality' (1..100) is used; ignored for other formats.
    Returns 0 on success, non-zero on failure. */
