@@ -190,32 +190,39 @@ render_ctx *ctx;
         return;
 
     /* ----------------------------------------------------------------
-       GPU (Metal) path — sphere-only scenes on Apple Silicon.
-       sect_sphere is declared in sphere.c; compare via function pointer
-       to identify sphere primitives without modifying older module code.
+       GPU (Metal) path — sphere/box/cylinder scenes on Apple Silicon.
+       Primitive type is identified by comparing the intersect function
+       pointer, so the older module code needs no changes. Scenes using
+       any other primitive (cone, ellipsoid, CSG, board, …) fall back.
     ---------------------------------------------------------------- */
     extern void sect_sphere(prim_type *, ray_type *);
+    extern void sect_box(prim_type *, ray_type *);
+    extern void sect_cylinder(prim_type *, ray_type *);
     if (use_gpu)
     {
-        /* Count top-level prims; bail if any are non-sphere */
+        /* Check top-level prims; bail if any is an unsupported type */
         prim_type *pp;
-        int ngpu = 0, all_spheres = 1;
+        int ngpu = 0, all_ok = 1;
         for (pp = master_database; pp != NULL; pp = pp->next)
             if (pp->isInCSG == 0)
             {
-                if (pp->sec_func != sect_sphere) { all_spheres = 0; break; }
+                if (pp->sec_func != sect_sphere &&
+                    pp->sec_func != sect_box &&
+                    pp->sec_func != sect_cylinder)
+                { all_ok = 0; break; }
                 ngpu++;
             }
 
-        if (!all_spheres)
-            printf("GPU: scene has non-sphere primitives — falling back to CPU\n");
+        if (!all_ok)
+            printf("GPU: scene has primitives the GPU backend can't render "
+                   "(only sphere/box/cylinder) — falling back to CPU\n");
         else if (!metal_available())
             printf("GPU: Metal not available — falling back to CPU\n");
         else
         {
-            /* Build a BVH over the spheres and flatten it for the GPU. The
-               sphere array is emitted in BVH leaf order so that each leaf's
-               'first' index lines up with the GPU sphere buffer. */
+            /* Build a BVH over the prims and flatten it for the GPU. The
+               primitive array is emitted in BVH leaf order so that each
+               leaf's 'first' index lines up with the GPU prim buffer. */
             bvh_t *gb = bvh_build(master_database);
             int nnodes   = bvh_node_count(gb);
             int nbounded = bvh_bounded_count(gb);
@@ -223,32 +230,61 @@ render_ctx *ctx;
 
             if (bvh_unbounded_count(gb) != 0)
             {
-                /* spheres always have a finite bound; this shouldn't happen */
+                /* these primitives always have a finite bound */
                 printf("GPU: unbounded primitive present — falling back to CPU\n");
                 bvh_free(gb);
                 goto cpu_path;
             }
 
-            /* Serialize spheres (in BVH order) and pre-bake surface color */
-            MetalSphere *ms = (MetalSphere *) malloc((size_t)nbounded * sizeof(MetalSphere));
+            /* Serialize prims (in BVH order) and pre-bake flat surface color */
+            MetalPrim *ms = (MetalPrim *) malloc((size_t)nbounded * sizeof(MetalPrim));
             for (si = 0; si < nbounded; si++)
             {
                 prim_type *bp = bvh_bounded_prim(gb, si);
                 input_type  inp;
                 output_type out;
+                int type;
+                point_type c;
+                double *tm = NULL;   /* 3x3 transform for box/cylinder */
                 memset(&inp, 0, sizeof(inp));
                 GetTexture(bp->inter.data[0].SurfAttrib, &inp, &out);
-                ms[si].cx = (float)bp->prim.sphere.c.x;
-                ms[si].cy = (float)bp->prim.sphere.c.y;
-                ms[si].cz = (float)bp->prim.sphere.c.z;
-                ms[si].radius   = (float)bp->prim.sphere.r;
-                ms[si].r        = (float)out.color.r;
-                ms[si].g        = (float)out.color.g;
-                ms[si].b        = (float)out.color.b;
-                ms[si].kdiff    = (float)bp->inter.data[0].kdiff;
-                ms[si].kspec    = (float)bp->inter.data[0].kspec;
-                ms[si].highlight= (float)out.highlight;
-                ms[si].pad0 = ms[si].pad1 = 0.0f;
+
+                if (bp->sec_func == sect_sphere)
+                {
+                    type = 0; c = bp->prim.sphere.c;
+                    ms[si].center[3] = (float)bp->prim.sphere.r;
+                }
+                else if (bp->sec_func == sect_box)
+                {
+                    type = 1; c = bp->prim.box.c; tm = bp->prim.box.t;
+                    ms[si].center[3] = 0.0f;
+                }
+                else /* sect_cylinder */
+                {
+                    type = 2; c = bp->prim.conic.c; tm = bp->prim.conic.t;
+                    ms[si].center[3] = 0.0f;
+                }
+
+                ms[si].center[0] = (float)c.x;
+                ms[si].center[1] = (float)c.y;
+                ms[si].center[2] = (float)c.z;
+
+                /* transform matrix t[0..8] packed across t0/t1/t2 lanes */
+                {
+                    float tt[9];
+                    int k;
+                    for (k = 0; k < 9; k++) tt[k] = tm ? (float)tm[k] : 0.0f;
+                    ms[si].t0[0]=tt[0]; ms[si].t0[1]=tt[1]; ms[si].t0[2]=tt[2]; ms[si].t0[3]=tt[3];
+                    ms[si].t1[0]=tt[4]; ms[si].t1[1]=tt[5]; ms[si].t1[2]=tt[6]; ms[si].t1[3]=tt[7];
+                    ms[si].t2[0]=tt[8];
+                }
+                ms[si].t2[1] = (float)type;
+                ms[si].t2[2] = (float)bp->inter.data[0].kdiff;
+                ms[si].t2[3] = (float)bp->inter.data[0].kspec;
+                ms[si].col[0] = (float)out.color.r;
+                ms[si].col[1] = (float)out.color.g;
+                ms[si].col[2] = (float)out.color.b;
+                ms[si].col[3] = (float)out.highlight;
             }
 
             /* Flatten BVH nodes for the GPU */
@@ -279,18 +315,29 @@ render_ctx *ctx;
             float f_amb[3] = {(float)ambient.r,(float)ambient.g,(float)ambient.b};
             float f_ac     = (float)ambcoef;
 
-            /* Background color sampled at "up" direction */
+            /* Background: sample one representative central sky ray, matching
+               the CPU's p==NULL path (hitpoint = ray direction * bkgrndsize).
+               The central pixel's target is M, so its direction is M - vp.
+               The GPU uses this single flat sky color (procedural gradient
+               backgrounds are approximated by their central value). */
             input_type  bki; output_type bko;
+            point_type  vpt = *GetViewpoint();
+            point_type  sdir;
+            double      sdl;
             memset(&bki, 0, sizeof(bki));
-            bki.hitpoint.x = 0.0 * bkgrndsize;
-            bki.hitpoint.y = 1.0 * bkgrndsize;
-            bki.hitpoint.z = 0.0 * bkgrndsize;
+            memset(&bko, 0, sizeof(bko));
+            sdir.x = M.x - vpt.x; sdir.y = M.y - vpt.y; sdir.z = M.z - vpt.z;
+            sdl = sqrt(sdir.x*sdir.x + sdir.y*sdir.y + sdir.z*sdir.z);
+            if (sdl > 0.0) { sdir.x/=sdl; sdir.y/=sdl; sdir.z/=sdl; }
+            bki.hitpoint.x = sdir.x * bkgrndsize;
+            bki.hitpoint.y = sdir.y * bkgrndsize;
+            bki.hitpoint.z = sdir.z * bkgrndsize;
             GetTexture(bkgrndmodule, &bki, &bko);
             float f_sky[3] = {(float)bko.color.r,(float)bko.color.g,(float)bko.color.b};
 
             unsigned char *gpupix = (unsigned char *) malloc((size_t)(Width*Height*4));
 
-            printf("Rendering %s (%dx%d) on Metal GPU (%d spheres, %d BVH nodes)...\n",
+            printf("Rendering %s (%dx%d) on Metal GPU (%d prims, %d BVH nodes)...\n",
                    outputfile, Width, Height, nbounded, nnodes);
             gettimeofday(&t0, NULL);
 

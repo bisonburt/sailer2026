@@ -98,6 +98,7 @@ Ordered by effort-to-payoff. See git history / PRs for implementation.
 | 6 | ✅ **DONE** — NEON SIMD BVH AABB tests | low-medium | **1.26× @ 400 objects (measured)** | ARM-only; scalar fallback for other platforms |
 | 7 | ✅ **DONE** — Metal GPU compute backend **+ GPU BVH** | high | **3–7× vs CPU (measured)** | sphere-only; auto CPU fallback |
 | 8 | ✅ **DONE** — binned SAH BVH build | medium | **1.16–1.30× (measured)** | build-only; pixel-identical; helps CPU **and** GPU |
+| 9 | ✅ **DONE** — GPU box + cylinder primitives | medium-high | **7.6× on xmas 4K (measured)** | unlocks realistic scenes on the GPU; flat-color surfaces |
 
 ### Item 5 findings — why scalar `float` was rejected
 Converting `point_type`/`rgb_type` from `double` to `float` (leaving math
@@ -173,6 +174,40 @@ differ, all at silhouette edges).
 With the GPU BVH the GPU now wins across the board (the earlier linear
 scan only won at 4K). Because traversal is O(log N), the 5000-sphere
 scene costs barely more than the 400-sphere scene at the same resolution.
+
+### GPU multi-primitive support (item 9)
+
+The Metal backend now renders **boxes** and **cylinders** in addition to
+spheres (the three primitives a flat-shaded realistic scene needs). The
+GPU primitive buffer became a tagged union (type + center + a 3×3
+transform + baked color); the shader dispatches per type in the BVH leaf
+loop. The box and cylinder intersection math is ported faithfully from
+[box.c](src/box.c) / [conic.c](src/conic.c); a useful simplification is
+that the kernel already orients the hit normal toward the viewer, so each
+intersector only needs to return the normal *line*, not its sign — which
+sidesteps the entry/exit cap-normal bookkeeping.
+
+This unlocks the **1091-object Christmas tree** ([scenes/xmas.json](scenes/xmas.json)),
+which previously fell back to the CPU because of its boxes (gifts, floor)
+and a cylinder (trunk):
+
+| Scene | CPU (15t) | Metal GPU | Speedup |
+|---|---|---|---|
+| xmas 4K (1081 spheres + 9 boxes + 1 cylinder) | 177.5 ms | 23.2 ms | **7.6×** |
+
+Geometry, ornaments, shadows, and the reflective floor match the CPU
+render; the only visible difference is the background, a procedural
+horizontal gradient (paramap→range) that the GPU approximates with a
+single flat color sampled along the central view ray (porting procedural
+textures to MSL is future work). Scenes using cone/ellipsoid, CSG, or
+procedural surfaces still fall back to the CPU automatically.
+
+A latent bug surfaced and was fixed along the way: `RunRange`
+([src/range.c](src/range.c)) dereferenced a NULL `defaultv` for a range
+with a fade but no default value. The normal CPU render never reaches that
+branch (a real ray always lands inside the fade), so the guard leaves all
+CPU output bit-identical; it only matters when sampling the background at
+an arbitrary point, as the GPU sky-baking does.
 
 ### Binned SAH BVH build (item 8)
 

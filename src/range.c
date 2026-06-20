@@ -337,8 +337,14 @@ int i;
 
     if (found == 0)
     {
-        input_type Nin = *in;
-        data->defaultv->funct(data->defaultv,&Nin,out);
+        /* Some ranges (e.g. a pure fade gradient) define no default value.
+           Only invoke the default when one exists; otherwise leave 'out' at
+           its initialized value rather than dereferencing a NULL module. */
+        if (data->defaultv != NULL)
+        {
+            input_type Nin = *in;
+            data->defaultv->funct(data->defaultv,&Nin,out);
+        }
     }
     return;
 }

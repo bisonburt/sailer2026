@@ -13,17 +13,27 @@
 #ifndef METAL_BACKEND_H
 #define METAL_BACKEND_H
 
-/* Per-sphere GPU record (layout must match the MSL shader's Sphere struct).
-   All floats; arranged in three float4s for 16-byte aligned GPU access. */
+/* Primitive type tags (must match the MSL shader). */
+enum {
+    MP_SPHERE   = 0,
+    MP_BOX      = 1,
+    MP_CYLINDER = 2
+};
+
+/* Generic GPU primitive (layout must match the MSL shader's Prim struct).
+   Five float4s = 80 bytes; 16-byte aligned for the GPU. Geometry and a
+   pre-baked flat surface color are packed together. */
 typedef struct {
-    float cx, cy, cz, radius;       /* world-space center + radius */
-    float r, g, b, kdiff;           /* surface color (0-1) + diffuse coeff */
-    float kspec, highlight, pad0, pad1; /* specular coeff, highlight exponent */
-} MetalSphere;
+    float center[4];   /* xyz = world center, w = radius (sphere)            */
+    float t0[4];       /* box/cylinder transform t[0..3] (world->unit space) */
+    float t1[4];       /* transform t[4..7]                                  */
+    float t2[4];       /* x = t[8], y = type, z = kdiff, w = kspec           */
+    float col[4];      /* xyz = baked surface color, w = highlight exponent  */
+} MetalPrim;
 
 /* Flattened BVH node (layout must match the MSL shader's BVHNode struct).
-   Leaf when count>0 (first = start index into the sphere array, which is in
-   BVH leaf order); otherwise internal (left/first = child node indices). */
+   Leaf when count>0 (first = start index into the primitive array, which is
+   in BVH leaf order); otherwise internal (left/first = child node indices). */
 typedef struct {
     float lo[4];    /* xyz = box min (w unused, padding) */
     float hi[4];    /* xyz = box max (w unused, padding) */
@@ -37,7 +47,7 @@ typedef struct {
 int metal_available(void);
 
 /*
-    Render the sphere list on the GPU.
+    Render the primitive list on the GPU.
     On success writes RGBA8 pixels (width * height * 4 bytes) to 'out_pixels'
     and returns 0.  Returns -1 if Metal setup or dispatch failed; the caller
     should retry on the CPU.
@@ -51,12 +61,12 @@ int metal_available(void);
     maxdepth          max reflection depth
     nodes / nnodes    flattened BVH (node 0 = root). If nnodes>0 the GPU
                       traverses the BVH; if 0 it falls back to a linear scan.
-                      When a BVH is supplied, 'spheres' must be in BVH leaf
+                      When a BVH is supplied, 'prims' must be in BVH leaf
                       order (so leaf 'first' indices line up).
     out_pixels        caller-allocated RGBA8 buffer, width*height*4 bytes
 */
 int metal_render_spheres(
-    const MetalSphere *spheres, int nspheres,
+    const MetalPrim *prims, int nprims,
     const MetalBVHNode *nodes, int nnodes,
     float vp[3], float M[3], float H[3], float V[3],
     int width, int height,
