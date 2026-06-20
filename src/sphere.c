@@ -75,7 +75,10 @@ prim_type *prim;
     prim->inter.data[0].origin = prim;
     prim->inter.data[1].origin = prim;
 
-   prim->bound_func = NULL;
+    /* a sphere is its own bounding sphere (used by the BVH) */
+    prim->boundinfo.c = center;
+    prim->boundinfo.r = rad;
+    prim->bound_func = NULL;
     return((void *)prim);
 }
 

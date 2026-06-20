@@ -53,6 +53,22 @@ this scene; verify per-scene before trusting it.
 
 Run it yourself: `make release && ./ray scenes/benchmark.json -t 15`
 
+### BVH spatial index (item 3)
+
+A BVH helps in proportion to object count. On the ~13-object benchmark its
+traversal overhead roughly cancels the savings; on a **400-sphere** scene
+([`scenes/spheres.json`](scenes/spheres.json)) it is transformative. All outputs
+are pixel-identical to the linear scan (`cmp`-verified).
+
+| Scene | Build | Linear (no BVH) | BVH | Speedup |
+|---|---|---|---|---|
+| benchmark (~13 obj) | 1 thread | 471 ms | 485 ms | 0.97× |
+| spheres (400 obj) | 1 thread | 4004 ms | 303 ms | **13.2×** |
+| spheres (400 obj) | 15 threads | 424 ms | 29.5 ms | **14.4×** |
+
+400-sphere scene, single-thread linear → **BVH + 15 threads**: 4004 ms → 29.5 ms
+= **136×**.
+
 ## Optimization roadmap (proposed, not yet implemented)
 
 Ordered by effort-to-payoff. See git history / PRs for implementation.
@@ -61,7 +77,7 @@ Ordered by effort-to-payoff. See git history / PRs for implementation.
 |---|---|---|---|---|
 | 1 | ✅ **DONE** — aggressive flags + `release` target | trivial | **1.34× (measured)** | low (`-ffast-math` caveats) |
 | 2 | ✅ **DONE** — multithread scanlines (pthreads + per-thread DB clone) | medium | **10.7× (measured)** | resolved via clone + `__thread` CSG scratch |
-| 3 | **BVH / spatial index** in `trace()` (currently O(N) per ray, no accel) | medium-high | 2–10× (scales with object count) | medium |
+| 3 | ✅ **DONE** — BVH/AABB spatial index in `trace()` | medium-high | **13× @ 400 objects (measured)** | resolved; per-thread, pixel-identical |
 | 4 | Implement the **shadow cache** (counter exists, always 0) | low-medium | 1.1–1.5× | low |
 | 5 | `double` → `float` + **NEON / `<simd/simd.h>`** vector math | high | 1.5–2× | precision, broad change |
 | 6 | **SIMD ray packets** (4–8 rays/bundle, SoA) | high | 2–4× | large rewrite |

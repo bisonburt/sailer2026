@@ -118,6 +118,11 @@ double cx = cos(rot.x*DEG2RAD) ,
     prim->inter.data[1].orig_num = 1;
     prim->inter.data[0].origin = prim;
     prim->inter.data[1].origin = prim;
+
+    /* conservative bounding sphere: centered at the conic, radius = the
+       half-extent diagonal (used by the BVH) */
+    prim->boundinfo.c = cent;
+    prim->boundinfo.r = sqrt(ax.x*ax.x + ax.y*ax.y + ax.z*ax.z);
     prim->bound_func = NULL;
     return((void *)prim);
 }

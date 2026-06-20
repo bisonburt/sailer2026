@@ -36,10 +36,12 @@ usage: ray <scene.json> [-o output.png] [-q quality] [-t threads]
 ### Performance
 
 The renderer is **multithreaded** (pthreads, one render gives each thread a
-private clone of the scene so it's lock-free) and scales near-linearly with
-cores — ~10.7× on a 15-core Apple M5 Pro, ~13.4× combined with the optimized
-`make release` build, all producing pixel-identical output. See
-[BENCHMARK.md](BENCHMARK.md) for the baseline, methodology, and roadmap.
+private clone of the scene so it's lock-free) and uses a **BVH** spatial index
+so `trace()` scales toward O(log N) in object count. On a 15-core Apple M5 Pro
+the threading alone is ~10.7×; the BVH adds ~13× on a 400-object scene; together
+a 400-sphere scene drops from ~4 s to ~30 ms. All optimizations produce
+pixel-identical output. See [BENCHMARK.md](BENCHMARK.md) for the baseline,
+methodology, and roadmap.
 
 ```sh
 make release           # -O3 -ffast-math -flto -mcpu tuned build

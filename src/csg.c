@@ -365,7 +365,43 @@ prim_type *prim;
     left->isInCSG = 0x1;
     right->isInCSG = 0x1;
 
-/* add these SOON (well not so soon (07 Aug 1993))*/
+    /*
+       Bounding sphere for the BVH: a sphere enclosing both children's
+       bounding spheres is a conservative bound for +, -, and * (the
+       result is always a subset of left union right). If either child
+       is unbounded (r <= 0) the CSG is treated as unbounded too.
+    */
+    if (left->boundinfo.r > 0.0 && right->boundinfo.r > 0.0)
+    {
+        point_type d;
+        double dist, rl = left->boundinfo.r, rr = right->boundinfo.r;
+        d.x = right->boundinfo.c.x - left->boundinfo.c.x;
+        d.y = right->boundinfo.c.y - left->boundinfo.c.y;
+        d.z = right->boundinfo.c.z - left->boundinfo.c.z;
+        dist = sqrt(d.x*d.x + d.y*d.y + d.z*d.z);
+        if (dist + rr <= rl)            /* right inside left */
+        {
+            prim->boundinfo = left->boundinfo;
+        }
+        else if (dist + rl <= rr)       /* left inside right */
+        {
+            prim->boundinfo = right->boundinfo;
+        }
+        else                            /* general enclosing sphere */
+        {
+            double R = (dist + rl + rr) * 0.5;
+            double t = (dist > 1e-9) ? (R - rl) / dist : 0.0;
+            prim->boundinfo.r = R;
+            prim->boundinfo.c.x = left->boundinfo.c.x + d.x * t;
+            prim->boundinfo.c.y = left->boundinfo.c.y + d.y * t;
+            prim->boundinfo.c.z = left->boundinfo.c.z + d.z * t;
+        }
+    }
+    else
+    {
+        prim->boundinfo.r = 0.0; /* unbounded -> always tested */
+    }
+
     prim->bound_func = NULL;
     return((void *)prim);
 }

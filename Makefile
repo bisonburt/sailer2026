@@ -29,7 +29,7 @@ SRCS := \
     src/sphere.c src/mathfun.c src/raymain.c src/view.c src/init.c \
     src/symtab.c src/attrib.c src/check.c src/range.c src/paramap.c \
     src/mandel.c src/bitmap.c src/global.c src/support.c src/translat.c \
-    src/parse_tr.c src/sail.c src/image.c src/jsonscene.c src/main.c \
+    src/parse_tr.c src/sail.c src/image.c src/jsonscene.c src/bvh.c src/main.c \
     third_party/cJSON.c
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))

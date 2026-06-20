@@ -32,6 +32,7 @@
 #include "view.h"
 #include "mathfun.h"
 #include "image.h"
+#include "bvh.h"
 #include "sailpub.h"
 
 /* protos for some sail functions */
@@ -48,6 +49,7 @@ static struct sail_module_struct *bkgrndmodule;
    in the thread-local 'database' that trace() and the sect_*() funcs use. */
 static prim_type *master_database;
 static __thread prim_type *database;
+static __thread bvh_t *thread_bvh;
 static int maxdepth;
 static int num_threads = 1;
 static char buff[128];
@@ -132,6 +134,9 @@ static void *render_worker(void *arg)
     /* thread-local scene: clone for parallel runs, share for single-thread */
     database = cloned ? CloneObjectDatabase(master_database) : master_database;
 
+    /* per-thread BVH over this thread's primitives (read-only, cheap to build) */
+    thread_bvh = bvh_build(database);
+
     ray.s = c->viewpoint;
 
     for (y = c->thread_id; y < c->height; y += c->nthreads)
@@ -149,6 +154,8 @@ static void *render_worker(void *arg)
         }
     }
 
+    bvh_free(thread_bvh);
+    thread_bvh = NULL;
     if (cloned) /* release this thread's clone (shared modules untouched) */
     {
         prim_type *pp = database, *nx;
@@ -227,71 +234,106 @@ render_ctx *ctx;
    Function: trace()
 ===============================================================
 */
-void trace(prim_type**p,prim_type *not,ray_type *ray,point_type *hit,point_type *nor,double shadow)
+/* per-ray state shared with the BVH visitor below */
+typedef struct
 {
-double u,usec = 100000.0;
-prim_type *cur;
-int stest;
+    ray_type   *ray;
+    prim_type  *skip;     /* object to ignore (NULL = none) */
+    int         stest;    /* shadow test? */
+    double      shadow;   /* shadow ray length */
+    double      usec;     /* distance of closest hit so far */
+    prim_type **p;        /* out: hit primitive (NULL if none) */
+    point_type *hit;      /* out: hit point */
+    point_type *nor;      /* out: surface normal */
+} trace_ctx;
 
-    if (shadow == 0.0)
-        stest = 0;
-    else
-        stest = 1;
+/* Test one candidate primitive. Returns 1 to stop traversal (shadow hit). */
+static int trace_visit(prim_type *cur, void *vp)
+{
+    trace_ctx *c = (trace_ctx *)vp;
+    double u;
 
-    for (cur = database; cur != NULL; cur = cur->next)
+    if (!((cur != c->skip || c->skip == NULL) && cur->isInCSG == 0x0))
+        return 0;
+
+    (*(cur->sec_func))(cur, c->ray);
+    u = cur->inter.data[0].u;
+
+    if (c->stest)
     {
-        if((cur != not  || not == NULL) && cur->isInCSG == 0x0) /* don't intersect object not */
+        if (cur->hit > 0 && u < c->shadow) /* occluder between point and light */
         {
-            (*(cur->sec_func)) (cur,ray);
-            u = cur->inter.data[0].u;
-            if (stest)
-            {
-                if(cur->hit > 0 && (u < shadow))
-                {
-                    /*  we hit an object between the light source
-                        and the surface
-                    */
-                    usec = u;
-                    *p = cur;
-                    return;
-                }
-            }
-            else
-            {
-                if((cur->hit > 0) && (u < usec))
-                {
-                    /* we hit an object */
-                    usec = u;
-                    *p = cur;
-                    if (!cur->inter.data[0].nor_func)
-                    {
-                        *hit = cur->inter.data[0].hit;
-                        *nor = cur->inter.data[0].nor;
-                    }
-                }
-            }
+            c->usec = u;
+            *c->p = cur;
+            return 1; /* stop: one occluder is enough */
         }
     }
+    else if (cur->hit > 0 && u < c->usec)  /* new closest hit */
+    {
+        c->usec = u;
+        *c->p = cur;
+        if (!cur->inter.data[0].nor_func)
+        {
+            *c->hit = cur->inter.data[0].hit;
+            *c->nor = cur->inter.data[0].nor;
+        }
+    }
+    return 0;
+}
 
-    if (usec > 99999.0 || stest) *p = NULL;
+void trace(prim_type**p,prim_type *not,ray_type *ray,point_type *hit,point_type *nor,double shadow)
+{
+trace_ctx c;
+
+    c.ray = ray;
+    c.skip = not;
+    c.stest = (shadow != 0.0);
+    c.shadow = shadow;
+    c.usec = 100000.0;
+    c.p = p;
+    c.hit = hit;
+    c.nor = nor;
+
+    *p = NULL;
+
+    /* Visit only primitives whose bounds the ray may cross (BVH), or fall
+       back to a linear scan if no acceleration structure is present. */
+    if (thread_bvh != NULL)
+    {
+        bvh_traverse(thread_bvh, ray, trace_visit, &c);
+    }
     else
     {
-        if ((*p)->inter.data[0].nor_func)
-        {
-            int hitnum=0;
-            double u = (*p)->inter.data[0].u;
-            if ((*p)->hit>0 && (*p)->hit<3) hitnum = (*p)->hit-1;
-            hit->x = ray->s.x + u*ray->d.x;
-            hit->y = ray->s.y + u*ray->d.y;
-            hit->z = ray->s.z + u*ray->d.z;
-            (*p)->inter.data[hitnum].hit = *hit;
-            (*p)->inter.data[hitnum].nor_func(*p,hitnum);
-             *nor = (*p)->inter.data[hitnum].nor;
-            hit->x  += 0.001*nor->x;
-            hit->y  += 0.001*nor->y;
-            hit->z  += 0.001*nor->z;
-            (*p)->inter.data[hitnum].hit = *hit;
-        }
+        prim_type *cur;
+        for (cur = database; cur != NULL; cur = cur->next)
+            if (trace_visit(cur, &c)) break;
+    }
+
+    /* shadow rays: *p already holds the occluder (or NULL); done */
+    if (c.stest) return;
+
+    if (c.usec > 99999.0)
+    {
+        *p = NULL;
+        return;
+    }
+
+    /* finalize hit point / normal for the closest hit if it uses a nor_func */
+    if ((*p)->inter.data[0].nor_func)
+    {
+        int hitnum = 0;
+        double u = (*p)->inter.data[0].u;
+        if ((*p)->hit > 0 && (*p)->hit < 3) hitnum = (*p)->hit - 1;
+        hit->x = ray->s.x + u*ray->d.x;
+        hit->y = ray->s.y + u*ray->d.y;
+        hit->z = ray->s.z + u*ray->d.z;
+        (*p)->inter.data[hitnum].hit = *hit;
+        (*p)->inter.data[hitnum].nor_func(*p,hitnum);
+        *nor = (*p)->inter.data[hitnum].nor;
+        hit->x += 0.001*nor->x;
+        hit->y += 0.001*nor->y;
+        hit->z += 0.001*nor->z;
+        (*p)->inter.data[hitnum].hit = *hit;
     }
 }
 
