@@ -50,6 +50,7 @@ static struct sail_module_struct *bkgrndmodule;
 static prim_type *master_database;
 static __thread prim_type *database;
 static __thread bvh_t *thread_bvh;
+static __thread prim_type *shadow_cache; /* last shadow-ray occluder */
 static int maxdepth;
 static int num_threads = 1;
 static char buff[128];
@@ -136,6 +137,7 @@ static void *render_worker(void *arg)
 
     /* per-thread BVH over this thread's primitives (read-only, cheap to build) */
     thread_bvh = bvh_build(database);
+    shadow_cache = NULL;
 
     ray.s = c->viewpoint;
 
@@ -296,6 +298,16 @@ trace_ctx c;
 
     *p = NULL;
 
+    /* Shadow-ray coherence: the object that occluded the previous shadow ray
+       is very likely to occlude this one too. Test it first and skip the full
+       traversal on a hit (Haines/Greenberg shadow cache). */
+    if (c.stest && not == NULL)
+    {
+        if (shadow_cache != NULL && trace_visit(shadow_cache, &c))
+            return; /* cache hit: still in shadow, no traversal needed */
+        c.skip = shadow_cache; /* already tested; don't retest in the scan */
+    }
+
     /* Visit only primitives whose bounds the ray may cross (BVH), or fall
        back to a linear scan if no acceleration structure is present. */
     if (thread_bvh != NULL)
@@ -309,8 +321,12 @@ trace_ctx c;
             if (trace_visit(cur, &c)) break;
     }
 
-    /* shadow rays: *p already holds the occluder (or NULL); done */
-    if (c.stest) return;
+    /* shadow rays: *p holds the occluder (or NULL); remember it and finish */
+    if (c.stest)
+    {
+        if (not == NULL && *p != NULL) shadow_cache = *p;
+        return;
+    }
 
     if (c.usec > 99999.0)
     {

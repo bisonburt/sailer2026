@@ -69,6 +69,21 @@ are pixel-identical to the linear scan (`cmp`-verified).
 400-sphere scene, single-thread linear → **BVH + 15 threads**: 4004 ms → 29.5 ms
 = **136×**.
 
+### Shadow cache (item 4)
+
+Each shaded point casts a shadow ray toward the light; the object that occluded
+the previous shadow ray is tested first and skips the full traversal on a hit.
+With the BVH already making shadow traversal cheap, the remaining gain is small
+(single-thread, BVH on in both):
+
+| Scene | No cache | + Shadow cache | Speedup |
+|---|---|---|---|
+| benchmark | 494 ms | 482 ms | 1.02× |
+| spheres (400 obj) | 298 ms | 287 ms | 1.04× |
+
+Output is pixel-identical. The big shadow-cache wins belonged to the pre-BVH
+O(N) era; it remains a cheap, safe extra here.
+
 ## Optimization roadmap (proposed, not yet implemented)
 
 Ordered by effort-to-payoff. See git history / PRs for implementation.
@@ -78,7 +93,7 @@ Ordered by effort-to-payoff. See git history / PRs for implementation.
 | 1 | ✅ **DONE** — aggressive flags + `release` target | trivial | **1.34× (measured)** | low (`-ffast-math` caveats) |
 | 2 | ✅ **DONE** — multithread scanlines (pthreads + per-thread DB clone) | medium | **10.7× (measured)** | resolved via clone + `__thread` CSG scratch |
 | 3 | ✅ **DONE** — BVH/AABB spatial index in `trace()` | medium-high | **13× @ 400 objects (measured)** | resolved; per-thread, pixel-identical |
-| 4 | Implement the **shadow cache** (counter exists, always 0) | low-medium | 1.1–1.5× | low |
+| 4 | ✅ **DONE** — shadow cache (last-occluder reuse) | low | **~1.02–1.04× (measured)** | low; small now that the BVH already accelerates shadow rays |
 | 5 | `double` → `float` + **NEON / `<simd/simd.h>`** vector math | high | 1.5–2× | precision, broad change |
 | 6 | **SIMD ray packets** (4–8 rays/bundle, SoA) | high | 2–4× | large rewrite |
 | 7 | **Metal GPU** compute backend | very high | 10–100× | separate backend |
