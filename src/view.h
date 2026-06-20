@@ -4,3 +4,4 @@ int GetWidth(void);
 int GetHeight(void);
 point_type *GetViewpoint(void);
 void InitView(point_type *,point_type *,point_type *,double,double,int,int);
+void GetCameraVectors(point_type *m, point_type *h, point_type *v);

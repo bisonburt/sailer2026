@@ -80,6 +80,17 @@ point_type *GetViewpoint()
     return(&viewpoint);
 }
 
+/*
+===============================================================
+   Function: GetCameraVectors()
+   Returns the M/H/V basis vectors needed to reproduce GetView().
+===============================================================
+*/
+void GetCameraVectors(point_type *m, point_type *h, point_type *v)
+{
+    *m = M; *h = H; *v = V;
+}
+
 
 /*
 ===============================================================

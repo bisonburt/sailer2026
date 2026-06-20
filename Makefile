@@ -18,7 +18,7 @@ WARN    := -Wno-implicit-function-declaration -Wno-implicit-int \
            -Wno-deprecated-declarations -Wno-pointer-sign \
            -Wno-return-type -Wno-parentheses
 CFLAGS  := -O2 -g $(CSTD) -Isrc -Ithird_party $(WARN)
-LDFLAGS := -lm
+LDFLAGS := -lm -framework Metal -framework Foundation -lc++
 
 BUILD   := build
 BIN     := ray
@@ -32,7 +32,8 @@ SRCS := \
     src/parse_tr.c src/sail.c src/image.c src/jsonscene.c src/bvh.c src/main.c \
     third_party/cJSON.c
 
-OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
+OBJS     := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
+METAL_OBJ := $(BUILD)/src/metal_backend.o
 
 .PHONY: all release run bench clean
 
@@ -41,15 +42,20 @@ all: $(BIN)
 # Optimized build (see BENCHMARK.md). ~1.3x over the default -O2 baseline,
 # single-threaded. Note: -ffast-math relaxes IEEE semantics; verify output.
 release: clean
-	$(MAKE) CFLAGS="-O3 -ffast-math -flto -mcpu=apple-m4 -fomit-frame-pointer -DNDEBUG -Isrc -Ithird_party $(WARN)" LDFLAGS="-lm -flto"
+	$(MAKE) CFLAGS="-O3 -ffast-math -flto -mcpu=apple-m4 -fomit-frame-pointer -DNDEBUG -Isrc -Ithird_party $(WARN)" LDFLAGS="-lm -flto -framework Metal -framework Foundation -lc++"
 
-$(BIN): $(OBJS)
-	$(CC) $(OBJS) $(LDFLAGS) -o $(BIN)
+$(BIN): $(OBJS) $(METAL_OBJ)
+	$(CC) $(OBJS) $(METAL_OBJ) $(LDFLAGS) -o $(BIN)
 	@echo "Built ./$(BIN)"
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# Objective-C Metal backend (separate rule: needs -ObjC flag)
+$(BUILD)/src/metal_backend.o: src/metal_backend.m
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -ObjC -c $< -o $@
 
 run: $(BIN)
 	./$(BIN) scenes/cone.json -o cone.png
@@ -57,6 +63,10 @@ run: $(BIN)
 # Render the benchmark scene 5x and print render times (see BENCHMARK.md).
 bench: $(BIN)
 	@for i in 1 2 3 4 5; do ./$(BIN) scenes/benchmark.json -o /tmp/bench.png | grep "render time"; done
+
+# GPU benchmark on the spheres scene (sphere-only; Metal-compatible)
+bench-gpu: $(BIN)
+	@for i in 1 2 3; do ./$(BIN) scenes/spheres.json --gpu -o /tmp/bench_gpu.png | grep "render time"; done
 
 clean:
 	rm -rf $(BUILD) $(BIN)

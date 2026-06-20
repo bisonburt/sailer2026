@@ -5,7 +5,9 @@
 
     Build: recursive spatial-median split on the longest axis of the
     centroid bounds (object-median fallback when a split is degenerate).
-    Traverse: iterative DFS with a ray/AABB slab test.
+    Traverse: iterative DFS with a precomputed-reciprocal slab test.
+    On ARM (Apple Silicon) the XY axes are tested simultaneously using
+    float64x2_t NEON intrinsics.
 */
 
 #include <stdlib.h>
@@ -13,8 +15,28 @@
 #include "structs.h"
 #include "bvh.h"
 
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
+
 #define LEAF_SIZE 2
 #define EPS 1e-6
+
+/* Precomputed per-ray data: reciprocal direction and origin. */
+typedef struct {
+    double inv_dx, inv_dy, inv_dz;
+    double sx, sy, sz;
+} ray_inv_t;
+
+static void precomp_inv(const ray_type *r, ray_inv_t *ri)
+{
+    ri->sx = r->s.x; ri->sy = r->s.y; ri->sz = r->s.z;
+    /* Use a large finite value for near-parallel axes (avoids NaN from 0*inf
+       and keeps the slab test branchless while being correct for IEEE math). */
+    ri->inv_dx = (fabs(r->d.x) < EPS) ? 1e30 : 1.0 / r->d.x;
+    ri->inv_dy = (fabs(r->d.y) < EPS) ? 1e30 : 1.0 / r->d.y;
+    ri->inv_dz = (fabs(r->d.z) < EPS) ? 1e30 : 1.0 / r->d.z;
+}
 
 typedef struct { point_type lo, hi; } aabb_t;
 
@@ -186,30 +208,60 @@ bvh_t *bvh_build(prim_type *database)
     return b;
 }
 
-/* Forward ray vs AABB slab test (hits at t >= 0). */
-static int ray_aabb(const aabb_t *bx, const ray_type *r)
+/*
+ * Branchless slab test using precomputed reciprocal directions.
+ * Formula: tmin = max over axes of min(t1,t2),  tmax = min over axes of max(t1,t2).
+ * Hit when tmax >= 0  &&  tmin <= tmax  (handles ray-inside-box and behind-box).
+ * The 1e30 sentinel for near-parallel axes gives correct results under IEEE math.
+ */
+#ifdef __ARM_NEON
+static int ray_aabb(const aabb_t *bx, const ray_inv_t *ri)
 {
-    double tmin = 0.0, tmax = 1e30;
-    double t1, t2, inv;
+    /* XY axes in a single NEON pass (float64x2_t = 2 doubles, 128-bit) */
+    float64x2_t lo   = {bx->lo.x, bx->lo.y};
+    float64x2_t hi   = {bx->hi.x, bx->hi.y};
+    float64x2_t s    = {ri->sx, ri->sy};
+    float64x2_t inv  = {ri->inv_dx, ri->inv_dy};
+    float64x2_t t1   = vmulq_f64(vsubq_f64(lo, s), inv);
+    float64x2_t t2   = vmulq_f64(vsubq_f64(hi, s), inv);
+    float64x2_t tlo  = vminq_f64(t1, t2);
+    float64x2_t thi  = vmaxq_f64(t1, t2);
+    double tmin = fmax(vgetq_lane_f64(tlo, 0), vgetq_lane_f64(tlo, 1));
+    double tmax = fmin(vgetq_lane_f64(thi, 0), vgetq_lane_f64(thi, 1));
 
-    /* x */
-    if (fabs(r->d.x) < EPS) { if (r->s.x < bx->lo.x || r->s.x > bx->hi.x) return 0; }
-    else { inv = 1.0/r->d.x; t1 = (bx->lo.x - r->s.x)*inv; t2 = (bx->hi.x - r->s.x)*inv;
-           if (t1 > t2) { double t = t1; t1 = t2; t2 = t; }
-           if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return 0; }
-    /* y */
-    if (fabs(r->d.y) < EPS) { if (r->s.y < bx->lo.y || r->s.y > bx->hi.y) return 0; }
-    else { inv = 1.0/r->d.y; t1 = (bx->lo.y - r->s.y)*inv; t2 = (bx->hi.y - r->s.y)*inv;
-           if (t1 > t2) { double t = t1; t1 = t2; t2 = t; }
-           if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return 0; }
-    /* z */
-    if (fabs(r->d.z) < EPS) { if (r->s.z < bx->lo.z || r->s.z > bx->hi.z) return 0; }
-    else { inv = 1.0/r->d.z; t1 = (bx->lo.z - r->s.z)*inv; t2 = (bx->hi.z - r->s.z)*inv;
-           if (t1 > t2) { double t = t1; t1 = t2; t2 = t; }
-           if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return 0; }
+    /* Z axis scalar */
+    double tz1 = (bx->lo.z - ri->sz) * ri->inv_dz;
+    double tz2 = (bx->hi.z - ri->sz) * ri->inv_dz;
+    if (tz1 < tz2) { if (tz1 > tmin) tmin = tz1; if (tz2 < tmax) tmax = tz2; }
+    else            { if (tz2 > tmin) tmin = tz2; if (tz1 < tmax) tmax = tz1; }
 
-    return tmax >= 0.0;
+    return tmax >= 0.0 && tmin <= tmax;
 }
+#else
+static int ray_aabb(const aabb_t *bx, const ray_inv_t *ri)
+{
+    double t1, t2;
+    double tmin, tmax;
+
+    t1 = (bx->lo.x - ri->sx) * ri->inv_dx;
+    t2 = (bx->hi.x - ri->sx) * ri->inv_dx;
+    tmin = t1 < t2 ? t1 : t2;
+    tmax = t1 < t2 ? t2 : t1;
+
+    t1 = (bx->lo.y - ri->sy) * ri->inv_dy;
+    t2 = (bx->hi.y - ri->sy) * ri->inv_dy;
+    if (t1 < t2) { if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; }
+    else         { if (t2 > tmin) tmin = t2; if (t1 < tmax) tmax = t1; }
+    if (tmin > tmax) return 0;
+
+    t1 = (bx->lo.z - ri->sz) * ri->inv_dz;
+    t2 = (bx->hi.z - ri->sz) * ri->inv_dz;
+    if (t1 < t2) { if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; }
+    else         { if (t2 > tmin) tmin = t2; if (t1 < tmax) tmax = t1; }
+
+    return tmax >= 0.0 && tmin <= tmax;
+}
+#endif
 
 void bvh_traverse(const bvh_t *b, const ray_type *ray,
                   bvh_visitor visit, void *ctx)
@@ -217,6 +269,7 @@ void bvh_traverse(const bvh_t *b, const ray_type *ray,
     int stack[128];
     int sp = 0;
     int i;
+    ray_inv_t ri;
 
     if (b == NULL) return;
 
@@ -225,11 +278,13 @@ void bvh_traverse(const bvh_t *b, const ray_type *ray,
 
     if (b->nnodes == 0) return;
 
+    precomp_inv(ray, &ri);   /* reciprocals computed once per ray */
+
     stack[sp++] = 0;
     while (sp > 0)
     {
         const node_t *n = &b->nodes[stack[--sp]];
-        if (!ray_aabb(&n->box, ray)) continue;
+        if (!ray_aabb(&n->box, &ri)) continue;
 
         if (n->count > 0) /* leaf */
         {

@@ -15,18 +15,19 @@
 #include <string.h>
 
 /* defined in raymain.c */
-int ProcessImage(const char *infile, const char *outfile, int quality, int threads);
+int ProcessImage(const char *infile, const char *outfile, int quality, int threads, int gpu);
 
 static void usage(const char *prog)
 {
     printf("SAILER ray tracer (2026 JSON edition)\n");
-    printf("usage: %s <scene.json> [-o output.png] [-q quality] [-t threads]\n", prog);
+    printf("usage: %s <scene.json> [-o output.png] [-q quality] [-t threads] [--gpu]\n", prog);
     printf("\n");
     printf("  <scene.json>     JSON scene description (required)\n");
     printf("  -o, --output F   output image; format from extension\n");
     printf("                   (.png .jpg .jpeg .bmp .tga .ppm). default: <scene>.png\n");
     printf("  -q, --quality N  JPEG quality 1..100 (default 90)\n");
     printf("  -t, --threads N  render threads (default: all cores; 1 = serial)\n");
+    printf("  --gpu            render on Metal GPU (sphere-only scenes; fallback to CPU)\n");
     printf("  -h, --help       this help\n");
 }
 
@@ -50,6 +51,7 @@ int main(int argc, char *argv[])
     char outbuf[1024];
     int quality = 90;
     int threads = 0; /* 0 = auto (all cores) */
+    int gpu = 0;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -65,6 +67,8 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--threads") == 0) {
             if (++i >= argc) { fprintf(stderr, "error: -t needs an argument\n"); return 1; }
             threads = atoi(argv[i]);
+        } else if (strcmp(argv[i], "--gpu") == 0) {
+            gpu = 1;
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "error: unknown option %s\n", argv[i]);
             usage(argv[0]);
@@ -88,5 +92,5 @@ int main(int argc, char *argv[])
     }
 
     printf("SAILER: rendering %s -> %s\n", infile, outfile);
-    return ProcessImage(infile, outfile, quality, threads);
+    return ProcessImage(infile, outfile, quality, threads, gpu);
 }

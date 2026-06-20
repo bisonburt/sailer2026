@@ -84,7 +84,7 @@ With the BVH already making shadow traversal cheap, the remaining gain is small
 Output is pixel-identical. The big shadow-cache wins belonged to the pre-BVH
 O(N) era; it remains a cheap, safe extra here.
 
-## Optimization roadmap (proposed, not yet implemented)
+## Optimization roadmap
 
 Ordered by effort-to-payoff. See git history / PRs for implementation.
 
@@ -95,8 +95,8 @@ Ordered by effort-to-payoff. See git history / PRs for implementation.
 | 3 | ✅ **DONE** — BVH/AABB spatial index in `trace()` | medium-high | **13× @ 400 objects (measured)** | resolved; per-thread, pixel-identical |
 | 4 | ✅ **DONE** — shadow cache (last-occluder reuse) | low | **~1.02–1.04× (measured)** | low; small now that the BVH already accelerates shadow rays |
 | 5 | ❌ **REJECTED** — naive `double`→`float` (point/rgb types) | medium | **slower + crashed** | see findings below |
-| 6 | **SIMD ray packets** (4–8 rays/bundle, SoA) | high | 2–4× | large rewrite |
-| 7 | **Metal GPU** compute backend | very high | 10–100× | separate backend |
+| 6 | ✅ **DONE** — NEON SIMD BVH AABB tests | low-medium | **1.26× @ 400 objects (measured)** | ARM-only; scalar fallback for other platforms |
+| 7 | ✅ **DONE** — Metal GPU compute backend | high | **1.11× @ 4K / 400 spheres** | sphere-only; scales better at high resolution |
 
 ### Item 5 findings — why scalar `float` was rejected
 Converting `point_type`/`rgb_type` from `double` to `float` (leaving math
@@ -113,6 +113,44 @@ Lesson: a scalar type swap is the wrong lever here. Real SIMD gains require
 processing *multiple* values per instruction (item 6, ray packets in SoA
 layout) or moving to the GPU (item 7) — not narrowing the scalar type. Items
 1–4 (flags, threads, BVH) already deliver the bulk of the achievable CPU win.
+
+### NEON SIMD BVH (item 6)
+
+ARM NEON `float64x2_t` processes two slab axes (X and Y) in one SIMD
+pass; Z is scalar. Reciprocal ray directions are precomputed once per
+`bvh_traverse` call (eliminating per-AABB division). Non-ARM builds
+fall back to the same branchless scalar path with precomputed reciprocals.
+
+| Scene | Before SIMD | After SIMD | Speedup |
+|---|---|---|---|
+| benchmark (~13 obj) | 43 ms | 43 ms | 1.00× |
+| spheres (400 obj, 15 threads) | 29.5 ms | 23.4 ms | **1.26×** |
+
+BVH traversal is not the bottleneck on the 13-object benchmark; the gain
+is visible where there are enough objects that AABB tests dominate.
+
+### Metal GPU backend (item 7)
+
+`--gpu` flag enables the Metal path. Scene must contain only sphere
+top-level primitives; any non-sphere prim causes automatic CPU fallback.
+The GPU executes a per-pixel compute kernel: ray generation → linear
+sphere scan → shadow ray → Phong shading → iterative reflections up to
+`maxdepth`. The Metal shader is compiled from embedded source at startup
+(no `xcrun`/`metallib` build step).
+
+GPU renders in `float32`; CPU uses `double` throughout. Outputs are
+visually identical (mean per-channel diff < 0.7/255); occasional
+silhouette edge pixels may differ due to precision.
+
+| Scene | CPU (15 threads + BVH) | Metal GPU | GPU vs CPU |
+|---|---|---|---|
+| 400 spheres 800×800 | 5.8 ms | 7.8 ms warm | 0.74× (CPU wins; BVH > GPU linear) |
+| 400 spheres 1080p | 23 ms | 27 ms warm | 0.85× |
+| 400 spheres 4K | 46.5 ms | **41.9 ms** | **1.11×** (GPU wins at high res) |
+
+The GPU crossover is at approximately 4K resolution for sphere-only scenes.
+The GPU linear scan is O(N) per ray; a GPU BVH would push the crossover to
+lower resolutions and extend the advantage to larger scenes.
 
 ### How the multithreading blocker was resolved (item 2)
 Intersection results are written into **shared** `prim_type.inter` fields during

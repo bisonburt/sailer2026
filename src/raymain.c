@@ -34,6 +34,7 @@
 #include "image.h"
 #include "bvh.h"
 #include "sailpub.h"
+#include "metal_backend.h"
 
 /* protos for some sail functions */
 void GetBackgroundInfo(double *,struct sail_module_struct **);
@@ -53,6 +54,7 @@ static __thread bvh_t *thread_bvh;
 static __thread prim_type *shadow_cache; /* last shadow-ray occluder */
 static int maxdepth;
 static int num_threads = 1;
+static int use_gpu = 0;
 static char buff[128];
 static char outputfile[1024];
 static int  outputquality = 90;
@@ -69,7 +71,7 @@ void raytrace(void);
     Returns 0 on success, non-zero on error.
 ======================================
 */
-int ProcessImage(const char *infile, const char *outfile, int quality, int threads)
+int ProcessImage(const char *infile, const char *outfile, int quality, int threads, int gpu)
 {
     if (InitSail((char *)infile) == FALSE)
     {
@@ -79,6 +81,7 @@ int ProcessImage(const char *infile, const char *outfile, int quality, int threa
 
     snprintf(outputfile, sizeof(outputfile), "%s", outfile);
     outputquality = quality;
+    use_gpu = gpu;
 
     /* threads <= 0 means "auto": use all online cores */
     if (threads <= 0)
@@ -185,6 +188,118 @@ render_ctx *ctx;
 
     if (ImageOpen(Width,Height) != 0)
         return;
+
+    /* ----------------------------------------------------------------
+       GPU (Metal) path — sphere-only scenes on Apple Silicon.
+       sect_sphere is declared in sphere.c; compare via function pointer
+       to identify sphere primitives without modifying older module code.
+    ---------------------------------------------------------------- */
+    extern void sect_sphere(prim_type *, ray_type *);
+    if (use_gpu)
+    {
+        /* Count top-level prims; bail if any are non-sphere */
+        prim_type *pp;
+        int ngpu = 0, all_spheres = 1;
+        for (pp = master_database; pp != NULL; pp = pp->next)
+            if (pp->isInCSG == 0)
+            {
+                if (pp->sec_func != sect_sphere) { all_spheres = 0; break; }
+                ngpu++;
+            }
+
+        if (!all_spheres)
+            printf("GPU: scene has non-sphere primitives — falling back to CPU\n");
+        else if (!metal_available())
+            printf("GPU: Metal not available — falling back to CPU\n");
+        else
+        {
+            /* Serialize spheres and pre-bake surface color via GetTexture */
+            MetalSphere *ms = (MetalSphere *) malloc((size_t)ngpu * sizeof(MetalSphere));
+            int si = 0;
+            for (pp = master_database; pp != NULL; pp = pp->next)
+            {
+                if (pp->isInCSG != 0) continue;
+                input_type  inp;
+                output_type out;
+                memset(&inp, 0, sizeof(inp));
+                GetTexture(pp->inter.data[0].SurfAttrib, &inp, &out);
+                ms[si].cx = (float)pp->prim.sphere.c.x;
+                ms[si].cy = (float)pp->prim.sphere.c.y;
+                ms[si].cz = (float)pp->prim.sphere.c.z;
+                ms[si].radius   = (float)pp->prim.sphere.r;
+                ms[si].r        = (float)out.color.r;
+                ms[si].g        = (float)out.color.g;
+                ms[si].b        = (float)out.color.b;
+                ms[si].kdiff    = (float)pp->inter.data[0].kdiff;
+                ms[si].kspec    = (float)pp->inter.data[0].kspec;
+                ms[si].highlight= (float)out.highlight;
+                ms[si].pad0 = ms[si].pad1 = 0.0f;
+                si++;
+            }
+
+            /* Camera vectors */
+            point_type M, H, V;
+            GetCameraVectors(&M, &H, &V);
+            float fvp[3] = {(float)lightsrc.x,(float)lightsrc.y,(float)lightsrc.z};
+            (void)fvp; /* used below via named vars */
+            float f_vp[3]  = {(float)(*GetViewpoint()).x,(float)(*GetViewpoint()).y,(float)(*GetViewpoint()).z};
+            float f_M[3]   = {(float)M.x,(float)M.y,(float)M.z};
+            float f_H[3]   = {(float)H.x,(float)H.y,(float)H.z};
+            float f_V[3]   = {(float)V.x,(float)V.y,(float)V.z};
+            float f_lpos[3]= {(float)lightsrc.x,(float)lightsrc.y,(float)lightsrc.z};
+            float f_lcol[3]= {(float)lightcolor.r,(float)lightcolor.g,(float)lightcolor.b};
+            float f_amb[3] = {(float)ambient.r,(float)ambient.g,(float)ambient.b};
+            float f_ac     = (float)ambcoef;
+
+            /* Background color sampled at "up" direction */
+            input_type  bki; output_type bko;
+            memset(&bki, 0, sizeof(bki));
+            bki.hitpoint.x = 0.0 * bkgrndsize;
+            bki.hitpoint.y = 1.0 * bkgrndsize;
+            bki.hitpoint.z = 0.0 * bkgrndsize;
+            GetTexture(bkgrndmodule, &bki, &bko);
+            float f_sky[3] = {(float)bko.color.r,(float)bko.color.g,(float)bko.color.b};
+
+            unsigned char *gpupix = (unsigned char *) malloc((size_t)(Width*Height*4));
+
+            printf("Rendering %s (%dx%d) on Metal GPU (%d spheres)...\n",
+                   outputfile, Width, Height, ngpu);
+            gettimeofday(&t0, NULL);
+
+            int gret = metal_render_spheres(
+                ms, ngpu,
+                f_vp, f_M, f_H, f_V,
+                Width, Height,
+                f_lpos, f_lcol, f_amb, f_ac,
+                f_sky, maxdepth, gpupix);
+
+            gettimeofday(&t1, NULL);
+            render_ms = (t1.tv_sec-t0.tv_sec)*1000.0 + (t1.tv_usec-t0.tv_usec)/1000.0;
+
+            if (gret == 0)
+            {
+                int x, y;
+                for (y = 0; y < Height; y++)
+                    for (x = 0; x < Width; x++)
+                    {
+                        rgb_type rgb;
+                        int idx = (y * Width + x) * 4;
+                        rgb.r = gpupix[idx]   / 255.0;
+                        rgb.g = gpupix[idx+1] / 255.0;
+                        rgb.b = gpupix[idx+2] / 255.0;
+                        ImageSetPixel(x, y, rgb);
+                    }
+                free(gpupix); free(ms);
+                ImageSave(outputfile, outputquality);
+                ImageClose();
+                printf("render time: %.1f ms  (%.0f primary rays/sec, Metal GPU)\n",
+                       render_ms, (double)Width*Height / (render_ms/1000.0));
+                return;
+            }
+            printf("GPU: dispatch failed — falling back to CPU\n");
+            free(gpupix); free(ms);
+        }
+    }
 
     n = num_threads;
     if (n < 1) n = 1;
