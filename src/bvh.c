@@ -19,7 +19,10 @@
 #include <arm_neon.h>
 #endif
 
-#define LEAF_SIZE 2
+#define LEAF_SIZE 2     /* hard floor: <= this many prims is always a leaf */
+#define MAX_LEAF  8      /* SAH may stop splitting once a node is this small */
+#define NUM_BINS  12     /* binned-SAH candidate split planes per axis */
+#define TRAV_COST 0.5    /* cost of a node traversal step relative to one isect */
 #define EPS 1e-6
 
 /* Precomputed per-ray data: reciprocal direction and origin. */
@@ -95,6 +98,21 @@ static double centroid_axis(const aabb_t *b, int axis)
     }
 }
 
+/* Half the surface area of an AABB (the SAH split-cost metric). */
+static double surface_area(const aabb_t *b)
+{
+    double dx = b->hi.x - b->lo.x;
+    double dy = b->hi.y - b->lo.y;
+    double dz = b->hi.z - b->lo.z;
+    if (dx < 0.0 || dy < 0.0 || dz < 0.0) return 0.0; /* empty box */
+    return 2.0 * (dx*dy + dy*dz + dz*dx);
+}
+
+static double box_axis_lo(const aabb_t *b, int a)
+{ return a == 0 ? b->lo.x : (a == 1 ? b->lo.y : b->lo.z); }
+static double box_axis_hi(const aabb_t *b, int a)
+{ return a == 0 ? b->hi.x : (a == 1 ? b->hi.y : b->hi.z); }
+
 static int alloc_node(bvh_t *b)
 {
     if (b->nnodes >= b->cap)
@@ -111,7 +129,12 @@ static int build_node(bvh_t *b, int start, int end)
     int self = alloc_node(b);
     aabb_t bounds, cbounds;
     int i, axis, mid;
-    double extent[3], mids;
+    int n = end - start;
+    double node_sa;
+    double best_cost = 1e300;
+    int    best_axis = -1;
+    double best_pos  = 0.0;
+    int    a;
 
     /* bounds of all primitive boxes, and of their centroids */
     box_reset(&bounds);
@@ -127,47 +150,120 @@ static int build_node(bvh_t *b, int start, int end)
         box_add(&cbounds, &cb);
     }
     b->nodes[self].box = bounds;
+    node_sa = surface_area(&bounds);
 
-    if (end - start <= LEAF_SIZE)
+    if (n <= LEAF_SIZE)
     {
         b->nodes[self].left = -1;
         b->nodes[self].first = start;
-        b->nodes[self].count = end - start;
+        b->nodes[self].count = n;
         return self;
     }
 
-    /* choose the longest centroid axis */
-    extent[0] = cbounds.hi.x - cbounds.lo.x;
-    extent[1] = cbounds.hi.y - cbounds.lo.y;
-    extent[2] = cbounds.hi.z - cbounds.lo.z;
-    axis = 0;
-    if (extent[1] > extent[axis]) axis = 1;
-    if (extent[2] > extent[axis]) axis = 2;
-
-    mids = centroid_axis(&cbounds, axis); /* spatial median */
-
-    /* partition order[start..end) about mids on 'axis' */
+    /* ---- Binned SAH: try NUM_BINS-1 candidate split planes on each axis
+       and keep the one minimising  SA(left)*Nleft + SA(right)*Nright. ---- */
+    for (a = 0; a < 3; a++)
     {
-        int lo = start, hi = end - 1;
-        while (lo <= hi)
+        double cmin = box_axis_lo(&cbounds, a);
+        double cmax = box_axis_hi(&cbounds, a);
+        double extent = cmax - cmin;
+        double scale;
+        aabb_t binbox[NUM_BINS];
+        int    bincnt[NUM_BINS];
+        double lsa[NUM_BINS];
+        int    lcnt[NUM_BINS];
+        aabb_t lacc, racc;
+        int    k, acc, racc_cnt;
+
+        if (extent < 1e-12) continue; /* centroids coincide on this axis */
+        scale = (double)NUM_BINS / extent;
+
+        for (k = 0; k < NUM_BINS; k++) { box_reset(&binbox[k]); bincnt[k] = 0; }
+
+        /* bin each primitive by its centroid on this axis */
+        for (i = start; i < end; i++)
         {
-            aabb_t pb = prim_box(b->order[lo]);
-            if (centroid_axis(&pb, axis) < mids)
-                lo++;
-            else
+            aabb_t pb = prim_box(b->order[i]);
+            int bin = (int)((centroid_axis(&pb, a) - cmin) * scale);
+            if (bin < 0) bin = 0;
+            if (bin >= NUM_BINS) bin = NUM_BINS - 1;
+            bincnt[bin]++;
+            box_add(&binbox[bin], &pb);
+        }
+
+        /* left-to-right prefix: SA and count of bins [0..k] */
+        box_reset(&lacc);
+        acc = 0;
+        for (k = 0; k < NUM_BINS; k++)
+        {
+            box_add(&lacc, &binbox[k]);
+            acc += bincnt[k];
+            lsa[k]  = surface_area(&lacc);
+            lcnt[k] = acc;
+        }
+
+        /* right-to-left suffix: evaluate the split between bin (k-1) and k */
+        box_reset(&racc);
+        racc_cnt = 0;
+        for (k = NUM_BINS - 1; k > 0; k--)
+        {
+            int nl, nr;
+            double cost;
+            box_add(&racc, &binbox[k]);
+            racc_cnt += bincnt[k];
+            nl = lcnt[k-1];
+            nr = racc_cnt;
+            if (nl == 0 || nr == 0) continue;
+            cost = lsa[k-1] * nl + surface_area(&racc) * nr;
+            if (cost < best_cost)
             {
-                prim_type *tmp = b->order[lo];
-                b->order[lo] = b->order[hi];
-                b->order[hi] = tmp;
-                hi--;
+                best_cost = cost;
+                best_axis = a;
+                best_pos  = cmin + (double)k / scale;
             }
         }
-        mid = lo;
     }
 
-    /* fall back to the object median if the split was degenerate */
-    if (mid == start || mid == end)
+    /* No usable split (all centroids coincident): split at the object median. */
+    if (best_axis < 0)
+    {
+        axis = 0;
         mid = (start + end) / 2;
+    }
+    else
+    {
+        /* Normalised SAH leaf-vs-split test; cap leaf size at MAX_LEAF. */
+        double cost_split = TRAV_COST + best_cost / (node_sa > 0.0 ? node_sa : 1.0);
+        if (n <= MAX_LEAF && (double)n <= cost_split)
+        {
+            b->nodes[self].left = -1;
+            b->nodes[self].first = start;
+            b->nodes[self].count = n;
+            return self;
+        }
+
+        /* partition order[start..end) about best_pos on best_axis */
+        axis = best_axis;
+        {
+            int lo = start, hi = end - 1;
+            while (lo <= hi)
+            {
+                aabb_t pb = prim_box(b->order[lo]);
+                if (centroid_axis(&pb, axis) < best_pos)
+                    lo++;
+                else
+                {
+                    prim_type *tmp = b->order[lo];
+                    b->order[lo] = b->order[hi];
+                    b->order[hi] = tmp;
+                    hi--;
+                }
+            }
+            mid = lo;
+        }
+        if (mid == start || mid == end)
+            mid = (start + end) / 2;
+    }
 
     {
         int l = build_node(b, start, mid);

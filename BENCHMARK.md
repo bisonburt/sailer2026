@@ -96,7 +96,8 @@ Ordered by effort-to-payoff. See git history / PRs for implementation.
 | 4 | ✅ **DONE** — shadow cache (last-occluder reuse) | low | **~1.02–1.04× (measured)** | low; small now that the BVH already accelerates shadow rays |
 | 5 | ❌ **REJECTED** — naive `double`→`float` (point/rgb types) | medium | **slower + crashed** | see findings below |
 | 6 | ✅ **DONE** — NEON SIMD BVH AABB tests | low-medium | **1.26× @ 400 objects (measured)** | ARM-only; scalar fallback for other platforms |
-| 7 | ✅ **DONE** — Metal GPU compute backend | high | **1.11× @ 4K / 400 spheres** | sphere-only; scales better at high resolution |
+| 7 | ✅ **DONE** — Metal GPU compute backend **+ GPU BVH** | high | **3–7× vs CPU (measured)** | sphere-only; auto CPU fallback |
+| 8 | ✅ **DONE** — binned SAH BVH build | medium | **1.16–1.30× (measured)** | build-only; pixel-identical; helps CPU **and** GPU |
 
 ### Item 5 findings — why scalar `float` was rejected
 Converting `point_type`/`rgb_type` from `double` to `float` (leaving math
@@ -172,6 +173,33 @@ differ, all at silhouette edges).
 With the GPU BVH the GPU now wins across the board (the earlier linear
 scan only won at 4K). Because traversal is O(log N), the 5000-sphere
 scene costs barely more than the 400-sphere scene at the same resolution.
+
+### Binned SAH BVH build (item 8)
+
+The build now chooses split planes with the **Surface Area Heuristic**
+instead of the spatial median. For each node it bins the primitives into
+`NUM_BINS` (12) slots along each of the three axes, sweeps the bins to
+evaluate every candidate split by estimated cost
+`SA(left)·Nleft + SA(right)·Nright`, and keeps the cheapest — falling back
+to the object median only when all centroids coincide. A normalised
+leaf-vs-split test (capped at `MAX_LEAF` = 8) avoids over-splitting.
+
+This is a **build-only** change: traversal, the GPU export, and the
+intersection math are untouched, so every output is **bit-identical**
+(`cmp`-verified on spheres, benchmark, cone, xmas, and the GPU path). A
+better-pruned tree simply visits fewer nodes and tests fewer primitives
+per ray, which helps **both** the CPU and the (shared) GPU tree.
+
+| Scene | Median split | SAH split | Speedup |
+|---|---|---|---|
+| spheres (400 obj, 1 thread) | 252 ms | 204 ms | **1.23×** |
+| xmas 4K (1091 obj, clustered, CPU) | 216.8 ms | 186.8 ms | **1.16×** |
+| spheres5k 1080p (GPU) | 11.6 ms | 8.9 ms | **1.30×** |
+| spheres (400 obj, 15 threads) | ~22 ms | ~22 ms | ~1× (noise-bound) |
+
+The win is clearest single-threaded and on clustered geometry; on a
+uniform grid the median split is already near-optimal, and at 15 threads
+the small scenes are dominated by run-to-run noise.
 
 ### How the multithreading blocker was resolved (item 2)
 Intersection results are written into **shared** `prim_type.inter` fields during
