@@ -55,7 +55,6 @@ static __thread prim_type *shadow_cache; /* last shadow-ray occluder */
 static int maxdepth;
 static int num_threads = 1;
 static int use_gpu = 0;
-static char buff[128];
 static char outputfile[1024];
 static int  outputquality = 90;
 
@@ -202,7 +201,7 @@ render_ctx *ctx;
     {
         /* Check top-level prims; bail if any is an unsupported type */
         prim_type *pp;
-        int ngpu = 0, all_ok = 1;
+        int all_ok = 1;
         for (pp = master_database; pp != NULL; pp = pp->next)
             if (pp->isInCSG == 0)
             {
@@ -210,7 +209,6 @@ render_ctx *ctx;
                     pp->sec_func != sect_box &&
                     pp->sec_func != sect_cylinder)
                 { all_ok = 0; break; }
-                ngpu++;
             }
 
         if (!all_ok)
@@ -304,8 +302,6 @@ render_ctx *ctx;
             /* Camera vectors */
             point_type M, H, V;
             GetCameraVectors(&M, &H, &V);
-            float fvp[3] = {(float)lightsrc.x,(float)lightsrc.y,(float)lightsrc.z};
-            (void)fvp; /* used below via named vars */
             float f_vp[3]  = {(float)(*GetViewpoint()).x,(float)(*GetViewpoint()).y,(float)(*GetViewpoint()).z};
             float f_M[3]   = {(float)M.x,(float)M.y,(float)M.z};
             float f_H[3]   = {(float)H.x,(float)H.y,(float)H.z};
@@ -612,20 +608,8 @@ prim_type   *locp;
     nor = OutputData.newnormal;
     hlt = OutputData.highlight;
 
-    /* debug */
-    if (dot(hitv,nor) > 0.0)
-    {
-         printf("N[%d]",level);
-         rgb->r=1.0;
-         rgb->g=0.0;
-         rgb->b=0.0;
-         return;
-    }
-
     reflect(hitv,nor,&flec);
 
-    if (dot(nor,flec) < 0.0)
-        printf("W");
     /* if nothing is between the hit point and light source then no shadow */
     if(locp == NULL)
     {

@@ -111,6 +111,7 @@ int currentRun = 0x0;
 int firstrun=1;
 int hit = 0x0;
 int phit = 0x0; /* positive hit point ? */
+int nrun = 0;   /* interT slots used by THIS evaluation (bounds the ring) */
 char op;
 
 
@@ -248,8 +249,15 @@ char op;
                 }
                 else
                 {
+                    /* Scratch is a fixed ring; if this single evaluation has
+                       used every slot, stop adding runs rather than wrapping
+                       back into a node still part of this result list. The
+                       CSG result is truncated, but never corrupted. */
+                    if (nrun >= MAXINTERLEN)
+                        break;
                     cc->next = &interT[curinter];
                     curinter = (curinter+1) % MAXINTERLEN;
+                    nrun++;
                     cc = cc->next;
                     cc->next = NULL;
                 }
