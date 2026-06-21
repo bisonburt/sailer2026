@@ -99,6 +99,7 @@ Ordered by effort-to-payoff. See git history / PRs for implementation.
 | 7 | ✅ **DONE** — Metal GPU compute backend **+ GPU BVH** | high | **3–7× vs CPU (measured)** | sphere-only; auto CPU fallback |
 | 8 | ✅ **DONE** — binned SAH BVH build | medium | **1.16–1.30× (measured)** | build-only; pixel-identical; helps CPU **and** GPU |
 | 9 | ✅ **DONE** — GPU box + cylinder primitives | medium-high | **7.6× on xmas 4K (measured)** | unlocks realistic scenes on the GPU; flat-color surfaces |
+| 10 | ✅ **DONE** — GPU cone + ellipsoid + board + triangle | medium | **~6× on all-prim 4K (measured)** | all primitives except CSG now on GPU; fixed 2 CPU/GPU fidelity bugs |
 
 ### Item 5 findings — why scalar `float` was rejected
 Converting `point_type`/`rgb_type` from `double` to `float` (leaving math
@@ -235,6 +236,32 @@ per ray, which helps **both** the CPU and the (shared) GPU tree.
 The win is clearest single-threaded and on clustered geometry; on a
 uniform grid the median split is already near-optimal, and at 15 threads
 the small scenes are dominated by run-to-run noise.
+
+### GPU: all primitives except CSG (item 10)
+
+The Metal shader now implements **cone, ellipsoid, board, and triangle** in
+addition to sphere/box/cylinder — every primitive except CSG. The conic
+intersections are ported from [conic.c](src/conic.c); board and triangle were
+given bounding spheres ([board.c](src/board.c), [tri.c](src/tri.c)) so they
+fit the existing bounded-BVH GPU path (this also lets the **CPU** BVH cull
+them — previously they were "always visited").
+
+| Scene | CPU (15t) | Metal GPU | Speedup |
+|---|---|---|---|
+| all 7 primitives, 4K | 65.9 ms | 11.1 ms | **5.9×** |
+
+Bringing the new primitives up exposed two CPU/GPU fidelity bugs, both fixed:
+- **Reflections ignored the surface tint.** The GPU reflection weight used
+  only `kspec`, while the CPU multiplies the reflected color by *both* `kspec`
+  and the attribute's `reflect` rgb. The GPU now bakes a per-channel
+  reflectivity (`reflect × kspec`), so tinted-metal reflections match.
+- **Board/triangle self-shadowing.** Primitives with a `nor_func` (sphere,
+  box, conic) get a `0.001·normal` shadow-bias offset in `trace()`; board and
+  triangle set their hit point exactly on the surface and got none, so their
+  shadow ray instantly re-hit the surface and float rounding made the floor
+  flicker between lit and shadowed per pixel. `trace()` now applies the same
+  bias to non-`nor_func` hits. (`nor_func` scenes stay bit-identical;
+  board/triangle scenes get a clean floor.)
 
 ### How the multithreading blocker was resolved (item 2)
 Intersection results are written into **shared** `prim_type.inter` fields during

@@ -18,8 +18,8 @@ the procedural texture library in one frame — rendered at 4K from
 |:---:|:---:|
 | [![CSG on a Mandelbrot floor](renders/csg_showcase.png)](renders/csg_showcase.png) | [![Christmas tree](renders/xmas.png)](renders/xmas.png) |
 | **Six CSG operations on a Mandelbrot floor** with subdued tinted metals — [`scenes/csg_showcase.json`](scenes/csg_showcase.json) | **1091-object Christmas tree** at 4K; sphere/box/cylinder, runs on the Metal GPU in ~23 ms — [`scenes/xmas.json`](scenes/xmas.json) |
-| [![400-sphere benchmark](renders/spheres.png)](renders/spheres.png) | [![CSG hollow pyramid](renders/cone.png)](renders/cone.png) |
-| **400-sphere BVH benchmark** — [`scenes/spheres.json`](scenes/spheres.json) | **CSG hollow pyramid** (box − cone ∩ cone) — [`scenes/cone.json`](scenes/cone.json) |
+| [![All primitives on the GPU](renders/allprimitives.png)](renders/allprimitives.png) | [![400-sphere benchmark](renders/spheres.png)](renders/spheres.png) |
+| **All seven non-CSG primitives**, rendered on the Metal GPU at 4K in ~11 ms — [`scenes/allprimitives.json`](scenes/allprimitives.json) | **400-sphere BVH benchmark** — [`scenes/spheres.json`](scenes/spheres.json) |
 
 ---
 
@@ -38,7 +38,7 @@ usage: ray <scene.json> [-o output.png] [-q quality] [-t threads] [--gpu]
                    (.png .jpg .jpeg .bmp .tga .ppm). default: <scene>.png
   -q, --quality N  JPEG quality 1..100 (default 90)
   -t, --threads N  render threads (default: all cores; 1 = serial)
-  --gpu            render on the Metal GPU (sphere/box/cylinder scenes; auto CPU fallback)
+  --gpu            render on the Metal GPU (all primitives except CSG; auto CPU fallback)
   -h, --help       help
 ```
 
@@ -53,14 +53,15 @@ is **NEON SIMD** on Apple Silicon. On a 15-core Apple M5 Pro the threading
 alone is ~10.7×; the BVH adds ~13× on a 400-object scene; together a
 400-sphere scene drops from ~4 s to ~25 ms.
 
-There is also an optional **Metal GPU backend** (`--gpu`) for scenes built
-from spheres, boxes, and cylinders. It runs a per-pixel compute kernel with a
-**GPU BVH** traversal — 3–7× faster than the multithreaded CPU path, and
-nearly flat in object count (5000 spheres at 1080p in ~9 ms). The 1091-object
-Christmas tree renders at 4K in ~23 ms on the GPU vs ~178 ms on the CPU.
-Scenes using primitives the GPU backend doesn't implement (cone, CSG,
-procedural textures) fall back to the CPU automatically. See
-[BENCHMARK.md](BENCHMARK.md) for the baseline, methodology, and full tables.
+There is also an optional **Metal GPU backend** (`--gpu`) that implements
+**every primitive except CSG** (sphere, box, cylinder, cone, ellipsoid,
+board, triangle). It runs a per-pixel compute kernel with a **GPU BVH**
+traversal — 3–7× faster than the multithreaded CPU path, and nearly flat in
+object count (5000 spheres at 1080p in ~9 ms). The 1091-object Christmas tree
+renders at 4K in ~23 ms on the GPU vs ~178 ms on the CPU. Scenes using CSG
+fall back to the CPU automatically (procedural textures are baked to flat
+colors on the GPU). See [BENCHMARK.md](BENCHMARK.md) for the baseline,
+methodology, and full tables.
 
 ```sh
 make release           # -O3 -ffast-math -flto -mcpu tuned build

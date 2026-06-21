@@ -15,9 +15,13 @@
 
 /* Primitive type tags (must match the MSL shader). */
 enum {
-    MP_SPHERE   = 0,
-    MP_BOX      = 1,
-    MP_CYLINDER = 2
+    MP_SPHERE    = 0,
+    MP_BOX       = 1,
+    MP_CYLINDER  = 2,
+    MP_CONE      = 3,
+    MP_ELLIPSOID = 4,
+    MP_BOARD     = 5,
+    MP_TRIANGLE  = 6
 };
 
 /* Generic GPU primitive (layout must match the MSL shader's Prim struct).
@@ -29,6 +33,7 @@ typedef struct {
     float t1[4];       /* transform t[4..7]                                  */
     float t2[4];       /* x = t[8], y = type, z = kdiff, w = kspec           */
     float col[4];      /* xyz = baked surface color, w = highlight exponent  */
+    float refl[4];     /* xyz = baked reflect tint * kspec (per-channel)     */
 } MetalPrim;
 
 /* Flattened BVH node (layout must match the MSL shader's BVHNode struct).

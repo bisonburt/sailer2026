@@ -72,6 +72,16 @@ prim_type *prim;
     prim->inter.data[0].kspec = kspec;
     prim->inter.data[0].nor_func = NULL;
     prim->inter.data[1].nor_func = NULL;
+
+    /* enclosing bounding sphere over the finite board rectangle (for the BVH) */
+    {
+        double cx = (l + r) / 2.0, cz = (n + f) / 2.0;
+        double dx = r - cx, dz = f - cz;
+        prim->boundinfo.c.x = cx;
+        prim->boundinfo.c.y = h;
+        prim->boundinfo.c.z = cz;
+        prim->boundinfo.r = sqrt(dx*dx + dz*dz) + 1e-4;
+    }
     prim->bound_func = NULL;
 
     return((void *)prim);
@@ -195,6 +205,16 @@ prim_type *prim;
     prim->inter.data[0].kspec = refl;
     prim->inter.data[0].nor_func = NULL;
     prim->inter.data[1].nor_func = NULL;
+
+    /* enclosing bounding sphere over the finite board rectangle (for the BVH) */
+    {
+        double cx = (left + right) / 2.0, cz = (nnear + ffar) / 2.0;
+        double dx = right - cx, dz = ffar - cz;
+        prim->boundinfo.c.x = cx;
+        prim->boundinfo.c.y = height;
+        prim->boundinfo.c.z = cz;
+        prim->boundinfo.r = sqrt(dx*dx + dz*dz) + 1e-4;
+    }
     prim->bound_func = NULL;
 
     return((void *)prim);

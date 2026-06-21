@@ -197,9 +197,14 @@ render_ctx *ctx;
     extern void sect_sphere(prim_type *, ray_type *);
     extern void sect_box(prim_type *, ray_type *);
     extern void sect_cylinder(prim_type *, ray_type *);
+    extern void sect_cone(prim_type *, ray_type *);
+    extern void sect_ellipsoid(prim_type *, ray_type *);
+    extern void sect_board(prim_type *, ray_type *);
+    extern void sect_tri(prim_type *, ray_type *);
     if (use_gpu)
     {
-        /* Check top-level prims; bail if any is an unsupported type */
+        /* Check top-level prims; bail if any is an unsupported type.
+           The GPU shader implements every primitive except CSG. */
         prim_type *pp;
         int all_ok = 1;
         for (pp = master_database; pp != NULL; pp = pp->next)
@@ -207,13 +212,17 @@ render_ctx *ctx;
             {
                 if (pp->sec_func != sect_sphere &&
                     pp->sec_func != sect_box &&
-                    pp->sec_func != sect_cylinder)
+                    pp->sec_func != sect_cylinder &&
+                    pp->sec_func != sect_cone &&
+                    pp->sec_func != sect_ellipsoid &&
+                    pp->sec_func != sect_board &&
+                    pp->sec_func != sect_tri)
                 { all_ok = 0; break; }
             }
 
         if (!all_ok)
-            printf("GPU: scene has primitives the GPU backend can't render "
-                   "(only sphere/box/cylinder) — falling back to CPU\n");
+            printf("GPU: scene uses CSG (or another unsupported primitive) "
+                   "— falling back to CPU\n");
         else if (!metal_available())
             printf("GPU: Metal not available — falling back to CPU\n");
         else
@@ -241,11 +250,13 @@ render_ctx *ctx;
                 prim_type *bp = bvh_bounded_prim(gb, si);
                 input_type  inp;
                 output_type out;
-                int type;
-                point_type c;
-                double *tm = NULL;   /* 3x3 transform for box/cylinder */
+                int type, k;
+                point_type c = {0,0,0};
+                double tt[9];        /* 9 geometry slots packed into t0/t1/t2.x */
                 memset(&inp, 0, sizeof(inp));
+                memset(tt, 0, sizeof(tt));
                 GetTexture(bp->inter.data[0].SurfAttrib, &inp, &out);
+                ms[si].center[3] = 0.0f;
 
                 if (bp->sec_func == sect_sphere)
                 {
@@ -254,28 +265,47 @@ render_ctx *ctx;
                 }
                 else if (bp->sec_func == sect_box)
                 {
-                    type = 1; c = bp->prim.box.c; tm = bp->prim.box.t;
-                    ms[si].center[3] = 0.0f;
+                    type = 1; c = bp->prim.box.c;
+                    for (k = 0; k < 9; k++) tt[k] = bp->prim.box.t[k];
                 }
-                else /* sect_cylinder */
+                else if (bp->sec_func == sect_cylinder)
                 {
-                    type = 2; c = bp->prim.conic.c; tm = bp->prim.conic.t;
-                    ms[si].center[3] = 0.0f;
+                    type = 2; c = bp->prim.conic.c;
+                    for (k = 0; k < 9; k++) tt[k] = bp->prim.conic.t[k];
+                }
+                else if (bp->sec_func == sect_cone)
+                {
+                    type = 3; c = bp->prim.conic.c;
+                    for (k = 0; k < 9; k++) tt[k] = bp->prim.conic.t[k];
+                }
+                else if (bp->sec_func == sect_ellipsoid)
+                {
+                    type = 4; c = bp->prim.conic.c;
+                    for (k = 0; k < 9; k++) tt[k] = bp->prim.conic.t[k];
+                }
+                else if (bp->sec_func == sect_board)
+                {
+                    type = 5;
+                    tt[0]=bp->prim.board.l; tt[1]=bp->prim.board.r;
+                    tt[2]=bp->prim.board.n; tt[3]=bp->prim.board.f;
+                    tt[4]=bp->prim.board.y;
+                }
+                else /* sect_tri */
+                {
+                    type = 6;
+                    tt[0]=bp->prim.tri.P[0].x; tt[1]=bp->prim.tri.P[0].y; tt[2]=bp->prim.tri.P[0].z;
+                    tt[3]=bp->prim.tri.P[1].x; tt[4]=bp->prim.tri.P[1].y; tt[5]=bp->prim.tri.P[1].z;
+                    tt[6]=bp->prim.tri.P[2].x; tt[7]=bp->prim.tri.P[2].y; tt[8]=bp->prim.tri.P[2].z;
                 }
 
                 ms[si].center[0] = (float)c.x;
                 ms[si].center[1] = (float)c.y;
                 ms[si].center[2] = (float)c.z;
 
-                /* transform matrix t[0..8] packed across t0/t1/t2 lanes */
-                {
-                    float tt[9];
-                    int k;
-                    for (k = 0; k < 9; k++) tt[k] = tm ? (float)tm[k] : 0.0f;
-                    ms[si].t0[0]=tt[0]; ms[si].t0[1]=tt[1]; ms[si].t0[2]=tt[2]; ms[si].t0[3]=tt[3];
-                    ms[si].t1[0]=tt[4]; ms[si].t1[1]=tt[5]; ms[si].t1[2]=tt[6]; ms[si].t1[3]=tt[7];
-                    ms[si].t2[0]=tt[8];
-                }
+                /* pack the 9 geometry slots across t0/t1/t2.x */
+                ms[si].t0[0]=(float)tt[0]; ms[si].t0[1]=(float)tt[1]; ms[si].t0[2]=(float)tt[2]; ms[si].t0[3]=(float)tt[3];
+                ms[si].t1[0]=(float)tt[4]; ms[si].t1[1]=(float)tt[5]; ms[si].t1[2]=(float)tt[6]; ms[si].t1[3]=(float)tt[7];
+                ms[si].t2[0]=(float)tt[8];
                 ms[si].t2[1] = (float)type;
                 ms[si].t2[2] = (float)bp->inter.data[0].kdiff;
                 ms[si].t2[3] = (float)bp->inter.data[0].kspec;
@@ -283,6 +313,16 @@ render_ctx *ctx;
                 ms[si].col[1] = (float)out.color.g;
                 ms[si].col[2] = (float)out.color.b;
                 ms[si].col[3] = (float)out.highlight;
+
+                /* per-channel reflectivity = attribute reflect tint * kspec,
+                   matching the CPU's  rgb += reflected * reflect * kspec  */
+                {
+                    double ks = bp->inter.data[0].kspec;
+                    ms[si].refl[0] = (float)(out.reflect.r * ks);
+                    ms[si].refl[1] = (float)(out.reflect.g * ks);
+                    ms[si].refl[2] = (float)(out.reflect.b * ks);
+                    ms[si].refl[3] = 0.0f;
+                }
             }
 
             /* Flatten BVH nodes for the GPU */
@@ -538,6 +578,16 @@ trace_ctx c;
         hit->y += 0.001*nor->y;
         hit->z += 0.001*nor->z;
         (*p)->inter.data[hitnum].hit = *hit;
+    }
+    else
+    {
+        /* Primitives without a nor_func (board, triangle) set their hit point
+           exactly on the surface. Apply the same shadow-bias offset the
+           nor_func path uses, so the shadow/reflection ray doesn't instantly
+           re-intersect the surface (self-shadowing flicker). */
+        hit->x += 0.001*nor->x;
+        hit->y += 0.001*nor->y;
+        hit->z += 0.001*nor->z;
     }
 }
 

@@ -86,32 +86,27 @@ prim_type *prim;
 
     prim->inter.data[0].kdiff = diff;
     prim->inter.data[0].kspec = refl;
+    prim->inter.data[1].kdiff = diff;
+    prim->inter.data[1].kspec = refl;
 
-#if 0
-    /* create a bounding sphere for this object */
-    prim->boundinfo.c.x = (vert[0].x+vert[1].x+vert[2].x)/3.0;
-    prim->boundinfo.c.y = (vert[0].y+vert[1].y+vert[2].y)/3.0;
-    prim->boundinfo.c.z = (vert[0].z+vert[1].z+vert[2].z)/3.0;
-
-    if ((tmp[0] = dist3d(prim->boundinfo.c,vert[0]))>
-        (tmp[1] = dist3d(prim->boundinfo.c,vert[1])))
+    /* enclosing bounding sphere (centroid + farthest vertex) for the BVH */
     {
-        prim->boundinfo.r = tmp[0];
-        if ((tmp[2] = dist3d(prim->boundinfo.c,vert[2]))>tmp[0])
+        int k;
+        double dx, dy, dz, r2, rmax = 0.0;
+        prim->boundinfo.c.x = (vert[0].x+vert[1].x+vert[2].x)/3.0;
+        prim->boundinfo.c.y = (vert[0].y+vert[1].y+vert[2].y)/3.0;
+        prim->boundinfo.c.z = (vert[0].z+vert[1].z+vert[2].z)/3.0;
+        for (k = 0; k < 3; k++)
         {
-            prim->boundinfo.r = tmp[2];
+            dx = vert[k].x - prim->boundinfo.c.x;
+            dy = vert[k].y - prim->boundinfo.c.y;
+            dz = vert[k].z - prim->boundinfo.c.z;
+            r2 = dx*dx + dy*dy + dz*dz;
+            if (r2 > rmax) rmax = r2;
         }
+        prim->boundinfo.r = sqrt(rmax) + 1e-4;
     }
-    else
-    {
-        prim->boundinfo.r = tmp[1];
-        if ((tmp[2] = dist3d(prim->boundinfo.c,vert[2]))>tmp[1])
-        {
-            prim->boundinfo.r = tmp[2];
-        }
-    }
-    prim->bound_func = sect_bound;
-#endif
+    prim->bound_func = NULL;
 
     return((void *)prim);
 }

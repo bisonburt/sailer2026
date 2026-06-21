@@ -1,0 +1,364 @@
+{
+  "scene": [
+    {
+      "kind": "view",
+      "viewpoint": {
+        "xyz": [
+          0,
+          7,
+          -16
+        ]
+      },
+      "gazedir": {
+        "xyz": [
+          0,
+          -0.16,
+          0.5
+        ]
+      },
+      "updir": {
+        "xyz": [
+          0,
+          1,
+          0
+        ]
+      },
+      "angle": 0.42,
+      "ratio": 1.7778,
+      "width": 3840,
+      "height": 2160
+    },
+    {
+      "kind": "global",
+      "ambient": {
+        "rgb": [
+          1,
+          1,
+          1
+        ]
+      },
+      "ambcoef": 0.25,
+      "lightsrc": {
+        "xyz": [
+          -16,
+          22,
+          -14
+        ]
+      },
+      "lightcolor": {
+        "rgb": [
+          1,
+          1,
+          1
+        ]
+      },
+      "bkgrndsurface": {
+        "kind": "attribute",
+        "color": {
+          "rgb": [
+            0.2,
+            0.35,
+            0.6
+          ]
+        }
+      },
+      "maxdepth": 4
+    },
+    {
+      "kind": "attribute",
+      "name": "red",
+      "color": {
+        "rgb": [
+          0.85,
+          0.2,
+          0.2
+        ]
+      },
+      "refl": {
+        "rgb": [
+          0.25,
+          0.25,
+          0.25
+        ]
+      },
+      "highlt": 40
+    },
+    {
+      "kind": "attribute",
+      "name": "grn",
+      "color": {
+        "rgb": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "refl": {
+        "rgb": [
+          0.25,
+          0.25,
+          0.25
+        ]
+      },
+      "highlt": 40
+    },
+    {
+      "kind": "attribute",
+      "name": "blu",
+      "color": {
+        "rgb": [
+          0.25,
+          0.4,
+          0.85
+        ]
+      },
+      "refl": {
+        "rgb": [
+          0.25,
+          0.25,
+          0.25
+        ]
+      },
+      "highlt": 40
+    },
+    {
+      "kind": "attribute",
+      "name": "yel",
+      "color": {
+        "rgb": [
+          0.9,
+          0.8,
+          0.2
+        ]
+      },
+      "refl": {
+        "rgb": [
+          0.25,
+          0.25,
+          0.25
+        ]
+      },
+      "highlt": 40
+    },
+    {
+      "kind": "attribute",
+      "name": "mag",
+      "color": {
+        "rgb": [
+          0.8,
+          0.25,
+          0.7
+        ]
+      },
+      "refl": {
+        "rgb": [
+          0.25,
+          0.25,
+          0.25
+        ]
+      },
+      "highlt": 40
+    },
+    {
+      "kind": "attribute",
+      "name": "cyn",
+      "color": {
+        "rgb": [
+          0.2,
+          0.7,
+          0.75
+        ]
+      },
+      "refl": {
+        "rgb": [
+          0.25,
+          0.25,
+          0.25
+        ]
+      },
+      "highlt": 40
+    },
+    {
+      "kind": "attribute",
+      "name": "flr",
+      "color": {
+        "rgb": [
+          0.6,
+          0.6,
+          0.65
+        ]
+      },
+      "refl": {
+        "rgb": [
+          0.2,
+          0.2,
+          0.2
+        ]
+      }
+    },
+    {
+      "kind": "board",
+      "height": -2,
+      "left": -40,
+      "right": 40,
+      "near": -8,
+      "far": 40,
+      "diff": 1.0,
+      "refl": 0.2,
+      "surface": "flr"
+    },
+    {
+      "kind": "sphere",
+      "loc": {
+        "xyz": [
+          -12,
+          0,
+          5
+        ]
+      },
+      "size": 2.0,
+      "diff": 1.0,
+      "refl": 0.2,
+      "surface": "red"
+    },
+    {
+      "kind": "box",
+      "loc": {
+        "xyz": [
+          -7,
+          0,
+          5
+        ]
+      },
+      "axis": {
+        "xyz": [
+          1.8,
+          1.8,
+          1.8
+        ]
+      },
+      "rot": {
+        "xyz": [
+          0,
+          25,
+          0
+        ]
+      },
+      "diff": 1.0,
+      "refl": 0.2,
+      "surface": "grn"
+    },
+    {
+      "kind": "conic",
+      "type": "cylinder",
+      "loc": {
+        "xyz": [
+          -2,
+          0.5,
+          5
+        ]
+      },
+      "axis": {
+        "xyz": [
+          1.5,
+          2.5,
+          1.5
+        ]
+      },
+      "rot": {
+        "xyz": [
+          0,
+          0,
+          0
+        ]
+      },
+      "diff": 1.0,
+      "refl": 0.2,
+      "surface": "blu"
+    },
+    {
+      "kind": "conic",
+      "type": "cone",
+      "loc": {
+        "xyz": [
+          3.5,
+          2.5,
+          5
+        ]
+      },
+      "axis": {
+        "xyz": [
+          1.8,
+          4.5,
+          1.8
+        ]
+      },
+      "rot": {
+        "xyz": [
+          0,
+          0,
+          0
+        ]
+      },
+      "diff": 1.0,
+      "refl": 0.2,
+      "surface": "yel"
+    },
+    {
+      "kind": "conic",
+      "type": "ellipsoid",
+      "loc": {
+        "xyz": [
+          8.5,
+          0.4,
+          5
+        ]
+      },
+      "axis": {
+        "xyz": [
+          1.6,
+          2.4,
+          1.6
+        ]
+      },
+      "rot": {
+        "xyz": [
+          0,
+          0,
+          0
+        ]
+      },
+      "diff": 1.0,
+      "refl": 0.2,
+      "surface": "mag"
+    },
+    {
+      "kind": "triangle",
+      "pt1": {
+        "xyz": [
+          11,
+          -2,
+          6
+        ]
+      },
+      "pt2": {
+        "xyz": [
+          15,
+          -2,
+          5
+        ]
+      },
+      "pt3": {
+        "xyz": [
+          13,
+          4,
+          5.5
+        ]
+      },
+      "diff": 1.0,
+      "refl": 0.2,
+      "surface": "cyn"
+    }
+  ],
+  "_comment": "All seven non-CSG primitives, flat-shaded \u2014 runs identically on CPU and the Metal GPU"
+}
