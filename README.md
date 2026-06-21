@@ -6,10 +6,20 @@ modernizes the original C sources to build with a current `clang`, replaces the
 old lex/yacc scene-description parser with a **JSON** front-end, and adds
 **PNG / JPEG** image output.
 
-![sample render](docs/cone.png)
+![SAILER texture showcase](renders/texture_showcase.png)
 
-*(A CSG hollow pyramid — a box minus a cone, intersected with a cone — sitting on a
-procedurally textured ground plane. Rendered from [`scenes/cone.json`](scenes/cone.json).)*
+*Every primitive (sphere, box, cylinder, cone, ellipsoid, board, triangle, CSG) and
+the procedural texture library in one frame — rendered at 4K from
+[`scenes/showcase.json`](scenes/showcase.json).*
+
+### Gallery
+
+| | |
+|:---:|:---:|
+| [![CSG on a Mandelbrot floor](renders/csg_showcase.png)](renders/csg_showcase.png) | [![Christmas tree](renders/xmas.png)](renders/xmas.png) |
+| **Six CSG operations on a Mandelbrot floor** with subdued tinted metals — [`scenes/csg_showcase.json`](scenes/csg_showcase.json) | **1091-object Christmas tree** at 4K; sphere/box/cylinder, runs on the Metal GPU in ~23 ms — [`scenes/xmas.json`](scenes/xmas.json) |
+| [![400-sphere benchmark](renders/spheres.png)](renders/spheres.png) | [![CSG hollow pyramid](renders/cone.png)](renders/cone.png) |
+| **400-sphere BVH benchmark** — [`scenes/spheres.json`](scenes/spheres.json) | **CSG hollow pyramid** (box − cone ∩ cone) — [`scenes/cone.json`](scenes/cone.json) |
 
 ---
 
