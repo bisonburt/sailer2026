@@ -19,5 +19,9 @@
 # keep the README sample image
 !docs/cone.png
 
+# keep the curated gallery renders
+!renders/
+!renders/*.png
+
 # Claude Code local settings
 .claude/settings.local.json
