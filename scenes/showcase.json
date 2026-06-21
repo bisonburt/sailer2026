@@ -1,0 +1,230 @@
+{
+  "_comment": "SAILER texture showcase — every primitive + the procedural surface library",
+
+  "scene": [
+    {
+      "kind": "view",
+      "viewpoint": { "xyz": [0.0, 5.5, -16.0] },
+      "gazedir":   { "xyz": [0.0, -0.12, 0.50] },
+      "updir":     { "xyz": [0.0, 1.0, 0.0] },
+      "angle": 0.40,
+      "ratio": 1.7778,
+      "width": 1600,
+      "height": 900
+    },
+
+    {
+      "kind": "global",
+      "ambient":    { "rgb": [1.0, 1.0, 1.0] },
+      "ambcoef": 0.22,
+      "lightsrc":   { "xyz": [-20.0, 26.0, -18.0] },
+      "lightcolor": { "rgb": [1.0, 1.0, 0.96] },
+      "bkgrndsize": 100.0,
+      "maxdepth": 6,
+      "bkgrndsurface": {
+        "kind": "paramap",
+        "axis": {
+          "kind": "bbox",
+          "loc":  { "xyz": [0.0, 0.0, 0.0] },
+          "size": { "xyz": [100.0, 100.0, 100.0] },
+          "rot":  { "xyz": [0.0, 0.0, 0.0] },
+          "flags": "WIDEALL"
+        },
+        "mapx": { "type": "PLANARY" },
+        "mapy": { "type": "OFF" },
+        "mapz": { "type": "OFF" },
+        "value": {
+          "kind": "range",
+          "rangevalue": "XVALUE",
+          "fade": {
+            "start": 0.0, "stop": 1.0,
+            "stvalue": { "kind": "attribute", "color": { "rgb": [0.04, 0.05, 0.10] } },
+            "spvalue": { "kind": "attribute", "color": { "rgb": [0.30, 0.50, 0.85] } }
+          }
+        }
+      }
+    },
+
+    {
+      "_comment": "=========== TEXTURE LIBRARY ===========",
+
+      "kind": "check", "name": "floorcheck",
+      "rep": { "xyz": [0.07, 0.07, 0.07] },
+      "even": { "kind": "attribute", "color": { "rgb": [0.80, 0.80, 0.84] }, "refl": { "rgb": [0.30, 0.30, 0.30] }, "highlt": 20.0 },
+      "odd":  { "kind": "attribute", "color": { "rgb": [0.08, 0.10, 0.14] }, "refl": { "rgb": [0.30, 0.30, 0.30] }, "highlt": 20.0 }
+    },
+
+    {
+      "_comment": "marble — FNOISE driving a white->teal fade (paramap + range)",
+      "kind": "paramap", "name": "marble",
+      "axis": { "kind": "bbox", "loc": { "xyz": [0.0, 0.0, 0.0] }, "size": { "xyz": [5.0, 5.0, 5.0] }, "rot": { "xyz": [0,0,0] }, "flags": "WIDEALL" },
+      "mapx": { "type": "FNOISE", "lattice": { "xyz": [3.0, 3.0, 3.0] } },
+      "mapy": { "type": "OFF" },
+      "mapz": { "type": "OFF" },
+      "value": {
+        "kind": "range", "rangevalue": "XVALUE",
+        "fade": {
+          "start": 0.0, "stop": 1.0,
+          "stvalue": { "kind": "attribute", "color": { "rgb": [0.95, 0.96, 1.00] }, "highlt": 40.0 },
+          "spvalue": { "kind": "attribute", "color": { "rgb": [0.18, 0.42, 0.50] }, "highlt": 12.0 }
+        }
+      }
+    },
+
+    {
+      "_comment": "checkerboard sphere — solid 3D checker (red / cream)",
+      "kind": "check", "name": "spherecheck",
+      "rep": { "xyz": [0.55, 0.55, 0.55] },
+      "even": { "kind": "attribute", "color": { "rgb": [0.85, 0.12, 0.14] }, "highlt": 30.0 },
+      "odd":  { "kind": "attribute", "color": { "rgb": [0.96, 0.93, 0.82] }, "highlt": 30.0 }
+    },
+
+    {
+      "_comment": "planet — NOISE driving a rust->tan fade (asteroid)",
+      "kind": "paramap", "name": "planet",
+      "axis": { "kind": "bbox", "loc": { "xyz": [0.0, 0.0, 0.0] }, "size": { "xyz": [2.4, 2.4, 2.4] }, "rot": { "xyz": [0,0,0] }, "flags": "WIDEALL" },
+      "mapx": { "type": "NOISE", "lattice": { "xyz": [5.0, 5.0, 5.0] } },
+      "mapy": { "type": "OFF" },
+      "mapz": { "type": "OFF" },
+      "value": {
+        "kind": "range", "rangevalue": "XVALUE",
+        "fade": {
+          "start": 0.0, "stop": 1.0,
+          "stvalue": { "kind": "attribute", "color": { "rgb": [0.35, 0.18, 0.10] }, "highlt": 6.0 },
+          "spvalue": { "kind": "attribute", "color": { "rgb": [0.85, 0.70, 0.45] }, "highlt": 6.0 }
+        }
+      }
+    },
+
+    {
+      "_comment": "barber pole — ANGULARY around Y, repeated solid red/white bands",
+      "kind": "paramap", "name": "barber",
+      "axis": { "kind": "bbox", "loc": { "xyz": [-13.5, 0.0, 15.0] }, "size": { "xyz": [1.7, 3.9, 1.7] }, "rot": { "xyz": [0,0,0] }, "flags": "NONE" },
+      "mapx": { "type": "ANGULARY" },
+      "mapy": { "type": "OFF" },
+      "mapz": { "type": "OFF" },
+      "value": {
+        "kind": "range", "rangevalue": "XVALUE", "rep": 6.0,
+        "solid": [
+          { "start": 0.0, "stop": 0.5, "value": { "kind": "attribute", "color": { "rgb": [0.85, 0.10, 0.12] }, "highlt": 40.0 } },
+          { "start": 0.5, "stop": 1.0, "value": { "kind": "attribute", "color": { "rgb": [0.96, 0.96, 0.96] }, "highlt": 40.0 } }
+        ]
+      }
+    },
+
+    {
+      "_comment": "rainbow egg — PLANARY up the height, six solid bands",
+      "kind": "paramap", "name": "stripes",
+      "axis": { "kind": "bbox", "loc": { "xyz": [4.5, -2.0, 15.0] }, "size": { "xyz": [2.1, 5.8, 2.1] }, "rot": { "xyz": [0,0,0] }, "flags": "WIDEALL" },
+      "mapx": { "type": "PLANARY" },
+      "mapy": { "type": "OFF" },
+      "mapz": { "type": "OFF" },
+      "value": {
+        "kind": "range", "rangevalue": "XVALUE",
+        "solid": [
+          { "start": 0.000, "stop": 0.167, "value": { "kind": "attribute", "color": { "rgb": [0.86, 0.16, 0.16] }, "highlt": 35.0 } },
+          { "start": 0.167, "stop": 0.333, "value": { "kind": "attribute", "color": { "rgb": [0.95, 0.55, 0.15] }, "highlt": 35.0 } },
+          { "start": 0.333, "stop": 0.500, "value": { "kind": "attribute", "color": { "rgb": [0.95, 0.88, 0.20] }, "highlt": 35.0 } },
+          { "start": 0.500, "stop": 0.667, "value": { "kind": "attribute", "color": { "rgb": [0.25, 0.72, 0.32] }, "highlt": 35.0 } },
+          { "start": 0.667, "stop": 0.833, "value": { "kind": "attribute", "color": { "rgb": [0.20, 0.45, 0.85] }, "highlt": 35.0 } },
+          { "start": 0.833, "stop": 1.001, "value": { "kind": "attribute", "color": { "rgb": [0.55, 0.25, 0.75] }, "highlt": 35.0 } }
+        ]
+      }
+    },
+
+    {
+      "_comment": "target cone — RADIALY rings from the axis, repeated solid bands",
+      "kind": "paramap", "name": "rings",
+      "axis": { "kind": "bbox", "loc": { "xyz": [13.5, 0.0, 15.0] }, "size": { "xyz": [2.7, 4.1, 2.7] }, "rot": { "xyz": [0,0,0] }, "flags": "NONE" },
+      "mapx": { "type": "RADIALY" },
+      "mapy": { "type": "OFF" },
+      "mapz": { "type": "OFF" },
+      "value": {
+        "kind": "range", "rangevalue": "XVALUE", "rep": 5.0,
+        "solid": [
+          { "start": 0.0, "stop": 0.5, "value": { "kind": "attribute", "color": { "rgb": [0.10, 0.30, 0.65] }, "highlt": 30.0 } },
+          { "start": 0.5, "stop": 1.0, "value": { "kind": "attribute", "color": { "rgb": [0.95, 0.85, 0.30] }, "highlt": 30.0 } }
+        ]
+      }
+    },
+
+    {
+      "_comment": "Mandelbrot panel — PLANARX/Y map a box face to 0..1, fed to mandel",
+      "kind": "paramap", "name": "mandeltex",
+      "axis": { "kind": "bbox", "loc": { "xyz": [-5.0, 1.2, 15.0] }, "size": { "xyz": [3.2, 3.2, 3.2] }, "rot": { "xyz": [0,0,0] }, "flags": "WIDEALL" },
+      "mapx": { "type": "PLANARX" },
+      "mapy": { "type": "PLANARY" },
+      "mapz": { "type": "OFF" },
+      "value": {
+        "kind": "mandel",
+        "left": -2.1, "right": 0.7, "bottom": -1.25, "top": 1.25,
+        "maxcount": 64, "rep": 2.0,
+        "rangemodule": {
+          "kind": "range", "rangevalue": "XVALUE", "rep": 1.0,
+          "solid": [
+            { "start": 0.00, "stop": 0.001, "value": { "kind": "attribute", "color": { "rgb": [0.02, 0.02, 0.05] } } }
+          ],
+          "fade": {
+            "start": 0.001, "stop": 1.0,
+            "stvalue": { "kind": "attribute", "color": { "rgb": [0.10, 0.05, 0.35] }, "highlt": 25.0 },
+            "spvalue": { "kind": "attribute", "color": { "rgb": [0.95, 0.95, 0.55] }, "highlt": 25.0 }
+          }
+        }
+      }
+    },
+
+    { "kind": "attribute", "name": "mirror", "color": { "rgb": [0.04, 0.05, 0.07] }, "refl": { "rgb": [0.95, 0.95, 0.97] }, "highlt": 80.0 },
+    { "kind": "attribute", "name": "gold",   "color": { "rgb": [0.92, 0.72, 0.20] }, "refl": { "rgb": [0.85, 0.70, 0.35] }, "highlt": 55.0 },
+    { "kind": "attribute", "name": "ruby",   "color": { "rgb": [0.72, 0.07, 0.12] }, "refl": { "rgb": [0.55, 0.35, 0.35] }, "highlt": 45.0 },
+    { "kind": "attribute", "name": "jade",   "color": { "rgb": [0.16, 0.60, 0.42] }, "refl": { "rgb": [0.35, 0.45, 0.40] }, "highlt": 30.0 },
+
+    {
+      "_comment": "=========== GEOMETRY ===========",
+
+      "_p": "floor plane (board) with a checkerboard",
+      "kind": "board",
+      "height": -2.0, "left": -55.0, "right": 55.0, "near": -10.0, "far": 60.0,
+      "diff": 1.0, "refl": 0.22, "surface": "floorcheck"
+    },
+
+    { "_p": "front: marble sphere",       "kind": "sphere", "loc": { "xyz": [-11.5, 0.5, 5.0] }, "size": 2.5, "diff": 1.0, "refl": 0.15, "surface": "marble" },
+    { "_p": "front: checkerboard sphere", "kind": "sphere", "loc": { "xyz": [-3.8, 0.4, 3.5] }, "size": 2.4, "diff": 1.0, "refl": 0.10, "surface": "spherecheck" },
+    { "_p": "front: mirror sphere",       "kind": "sphere", "loc": { "xyz": [4.0, 0.6, 5.0] }, "size": 2.6, "diff": 0.6, "refl": 0.9, "surface": "mirror" },
+    { "_p": "front: noise planet",        "kind": "sphere", "loc": { "xyz": [11.5, 0.4, 4.0] }, "size": 2.4, "diff": 1.0, "refl": 0.08, "surface": "planet" },
+
+    { "_p": "mid: barber-pole cylinder",  "kind": "conic", "loc": { "xyz": [-13.5, 1.9, 15.0] }, "axis": { "xyz": [1.7, 3.9, 1.7] }, "rot": { "xyz": [0,0,0] }, "type": "cylinder", "diff": 1.0, "refl": 0.10, "surface": "barber" },
+    { "_p": "mid: Mandelbrot panel (box)","kind": "box",   "loc": { "xyz": [-5.0, 1.2, 15.0] }, "axis": { "xyz": [3.2, 3.2, 0.5] }, "rot": { "xyz": [0,0,0] }, "diff": 1.0, "refl": 0.05, "surface": "mandeltex" },
+    { "_p": "mid: rainbow ellipsoid",     "kind": "conic", "loc": { "xyz": [4.5, 0.9, 15.0] }, "axis": { "xyz": [2.1, 2.9, 2.1] }, "rot": { "xyz": [0,0,0] }, "type": "ellipsoid", "diff": 1.0, "refl": 0.08, "surface": "stripes" },
+    { "_p": "mid: target cone",           "kind": "conic", "loc": { "xyz": [13.5, 2.1, 15.0] }, "axis": { "xyz": [2.7, 4.1, 2.7] }, "rot": { "xyz": [0,0,0] }, "type": "cone", "diff": 1.0, "refl": 0.10, "surface": "rings" },
+
+    {
+      "_p": "back: CSG difference — gold cube with a sphere carved out",
+      "kind": "csg", "operation": "-",
+      "left":  { "kind": "box",    "loc": { "xyz": [-10.0, 1.0, 26.0] }, "axis": { "xyz": [3.0, 3.0, 3.0] }, "rot": { "xyz": [0, 30, 0] }, "diff": 1.0, "refl": 0.2, "surface": "gold" },
+      "right": { "kind": "sphere", "loc": { "xyz": [-10.0, 3.6, 26.0] }, "size": 2.4, "diff": 1.0, "refl": 0.2, "surface": "gold" }
+    },
+
+    {
+      "_p": "back: CSG union — two marble spheres fused into a blob",
+      "kind": "csg", "operation": "+",
+      "left":  { "kind": "sphere", "loc": { "xyz": [-1.4, 1.0, 27.0] }, "size": 2.6, "diff": 1.0, "refl": 0.15, "surface": "marble" },
+      "right": { "kind": "sphere", "loc": { "xyz": [1.8, 0.4, 26.0] }, "size": 2.0, "diff": 1.0, "refl": 0.15, "surface": "marble" }
+    },
+
+    {
+      "_p": "back: CSG intersection — sphere AND box = rounded ruby cube",
+      "kind": "csg", "operation": "*",
+      "left":  { "kind": "sphere", "loc": { "xyz": [10.0, 1.0, 26.0] }, "size": 3.0, "diff": 1.0, "refl": 0.2, "surface": "ruby" },
+      "right": { "kind": "box",    "loc": { "xyz": [10.0, 1.0, 26.0] }, "axis": { "xyz": [2.4, 2.4, 2.4] }, "rot": { "xyz": [0, 20, 0] }, "diff": 1.0, "refl": 0.2, "surface": "ruby" }
+    },
+
+    {
+      "_p": "left-back: a jade triangle sail",
+      "kind": "triangle",
+      "pt1": { "xyz": [-24.0, -2.0, 18.0] },
+      "pt2": { "xyz": [-20.0,  8.0, 21.0] },
+      "pt3": { "xyz": [-15.0, -2.0, 24.0] },
+      "diff": 1.0, "refl": 0.15, "surface": "jade"
+    }
+  ]
+}

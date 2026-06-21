@@ -205,9 +205,12 @@ double u0,v0,u1,v1,u2,v2,alpha,beta,inter;
     }
     else
     {
-        p->hit= 0x0;
-        if (p->inter.data[0].u > 0.0001) p->hit = 1;
-        else p->hit = -1;
+        /* The ray crossed the triangle's plane but landed outside the
+           triangle itself: this is a clean miss. (The original code here
+           resurrected a stale p->inter.data[0].u from a previous ray that
+           did hit, reporting a false hit and smearing the triangle's color
+           across its whole infinite plane.) */
+        p->hit = 0x0;
         return;
     }
 }
